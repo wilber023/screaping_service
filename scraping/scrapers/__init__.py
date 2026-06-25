@@ -3,6 +3,7 @@ from scraping.scrapers.mercadolibre_scraper import MercadoLibreScraper
 from scraping.scrapers.syngenta_scraper import SyngentaScraper
 from scraping.scrapers.bayer_scraper import BayerScraper
 from scraping.scrapers.basf_scraper import BasfScraper
+from scraping.scrapers.cofepris_scraper import CofeprisScraper
 
 ALL_SCRAPERS = [
     AgrofyScraper,
@@ -10,6 +11,7 @@ ALL_SCRAPERS = [
     SyngentaScraper,
     BayerScraper,
     BasfScraper,
+    CofeprisScraper,
 ]
 
 __all__ = [
@@ -18,5 +20,6 @@ __all__ = [
     "SyngentaScraper",
     "BayerScraper",
     "BasfScraper",
+    "CofeprisScraper",
     "ALL_SCRAPERS",
 ]

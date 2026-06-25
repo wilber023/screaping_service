@@ -11,6 +11,7 @@ class ProductSource(str, Enum):
     syngenta = "syngenta"
     bayer = "bayer"
     basf = "basf"
+    cofepris = "cofepris"
 
 
 class ProductType(str, Enum):
