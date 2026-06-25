@@ -22,12 +22,15 @@ _CAPTCHA_INDICATORS = [
     "robot",
     "human verification",
     "access denied",
-    "cloudflare",
     "please verify",
     "verificación",
     "bot detection",
     "rate limit",
     "too many requests",
+    "just a moment",           # Cloudflare IUAM challenge title
+    "cf-browser-verification", # Cloudflare challenge div id
+    "challenge-form",          # Cloudflare challenge form
+    "checking your browser",   # Cloudflare challenge text
 ]
 
 

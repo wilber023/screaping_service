@@ -55,7 +55,11 @@ class BayerScraper(BaseScraper):
         return products
 
     def _get_product_urls(self) -> List[str]:
-        html = self._fetch_html(_CATALOG_URL, referer=_BASE_URL)
+        html = self._fetch_html(
+            _CATALOG_URL,
+            referer=_BASE_URL,
+            wait_selector="main, article, .product-card, [class*='product'], .catalog",
+        )
         if detect_block(html):
             raise BlockedError("Bayer catalog blocked")
 

@@ -8,12 +8,10 @@ import re
 from typing import List, Optional
 from urllib.parse import urljoin
 
-import httpx
 from bs4 import BeautifulSoup
 
 from scraping.scrapers.base_scraper import BaseScraper, RawProduct
 from scraping.utils.anti_blocking import detect_block, random_delay, BlockedError
-from scraping.utils.headers import get_browser_headers
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +56,11 @@ class BasfScraper(BaseScraper):
     def _get_product_urls(self) -> List[str]:
         for catalog_url in [_CATALOG_URL, _ALT_CATALOG_URL]:
             try:
-                html = self._fetch_html(catalog_url, referer=_BASE_URL)
+                html = self._fetch_html(
+                    catalog_url,
+                    referer=_BASE_URL,
+                    wait_selector="main, article, .product-item, [class*='product'], .catalog",
+                )
                 if detect_block(html):
                     continue
                 return self._extract_urls_from_catalog(html, catalog_url)
@@ -83,9 +85,7 @@ class BasfScraper(BaseScraper):
         return urls[:100]
 
     def _scrape_product_page(self, url: str) -> Optional[RawProduct]:
-        resp = self._client.get(url, headers=get_browser_headers(referer=_CATALOG_URL))
-        resp.raise_for_status()
-        html = resp.text
+        html = self._fetch_html(url, referer=_CATALOG_URL)
 
         if detect_block(html):
             raise BlockedError(f"BASF blocked: {url}")

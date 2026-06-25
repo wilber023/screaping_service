@@ -56,7 +56,11 @@ class SyngentaScraper(BaseScraper):
         return products
 
     def _get_product_urls(self) -> List[str]:
-        html = self._fetch_html(_CATALOG_URL, referer=_BASE_URL)
+        html = self._fetch_html(
+            _CATALOG_URL,
+            referer=_BASE_URL,
+            wait_selector="main, article, .view-content, .views-row, [class*='product']",
+        )
         if detect_block(html):
             raise BlockedError("Syngenta catalog page is blocked")
 

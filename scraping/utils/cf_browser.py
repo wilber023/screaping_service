@@ -30,8 +30,8 @@ def is_available() -> bool:
 def render_page(
     url: str,
     wait_selector: Optional[str] = None,
-    wait_until: str = "networkidle2",
-    timeout_ms: int = 30000,
+    wait_until: str = "networkidle0",
+    timeout_ms: int = 60000,
 ) -> str:
     """
     Renderiza una URL con Chromium de Cloudflare y devuelve el HTML completo.
