@@ -35,6 +35,10 @@ services:
         value: us-east-1
       - key: S3_ENDPOINT_URL
         value: ""
+      - key: CLOUDFLARE_ACCOUNT_ID
+        value: ""
+      - key: CLOUDFLARE_API_TOKEN
+        value: ""
       - key: PROXY_LIST
         value: ""
       - key: SCRAPE_INTERVAL_HOURS

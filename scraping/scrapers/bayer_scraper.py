@@ -37,70 +37,48 @@ _TYPE_KEYWORDS = {
 class BayerScraper(BaseScraper):
     source = "bayer"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._client = httpx.Client(
-            timeout=30,
-            follow_redirects=True,
-            headers=get_browser_headers(referer=_BASE_URL),
-        )
-
     def scrape(self) -> List[RawProduct]:
         products: List[RawProduct] = []
-        try:
-            product_urls = self._get_product_urls()
-            logger.info("Bayer: found %d product URLs", len(product_urls))
+        product_urls = self._get_product_urls()
+        logger.info("Bayer: found %d product URLs", len(product_urls))
 
-            for url in product_urls[:80]:
-                try:
-                    product = self._scrape_product_page(url)
-                    if product:
-                        products.append(product)
-                    random_delay(2.0, 4.5)
-                except Exception as exc:
-                    logger.warning("Bayer product page failed url=%s: %s", url, exc)
-        finally:
-            self._client.close()
+        for url in product_urls[:80]:
+            try:
+                product = self._scrape_product_page(url)
+                if product:
+                    products.append(product)
+                random_delay(2.0, 4.5)
+            except Exception as exc:
+                logger.warning("Bayer product page failed url=%s: %s", url, exc)
 
         logger.info("Bayer scrape complete: %d products", len(products))
         return products
 
     def _get_product_urls(self) -> List[str]:
-        resp = self._client.get(_CATALOG_URL)
-        resp.raise_for_status()
-        html = resp.text
-
+        html = self._fetch_html(_CATALOG_URL, referer=_BASE_URL)
         if detect_block(html):
             raise BlockedError("Bayer catalog blocked")
 
         soup = BeautifulSoup(html, "html.parser")
         urls: List[str] = []
-
         for link in soup.select("a[href]"):
             href = link.get("href", "")
             if "/producto" in href.lower() or "/product" in href.lower():
                 full = urljoin(_BASE_URL, href)
                 if full not in urls and _BASE_URL in full:
                     urls.append(full)
-
-        # Also look for product cards that link to detail pages
         for card in soup.select(".product-card, .card-product, [class*='product-item']"):
             link = card.select_one("a[href]")
             if link:
                 full = urljoin(_BASE_URL, link.get("href", ""))
                 if full not in urls and _BASE_URL in full:
                     urls.append(full)
-
         return urls
 
     def _scrape_product_page(self, url: str) -> Optional[RawProduct]:
-        resp = self._client.get(url, headers=get_browser_headers(referer=_CATALOG_URL))
-        resp.raise_for_status()
-        html = resp.text
-
+        html = self._fetch_html(url, referer=_CATALOG_URL)
         if detect_block(html):
             raise BlockedError(f"Bayer blocked: {url}")
-
         soup = BeautifulSoup(html, "html.parser")
         return self._parse_page(soup, url, html)
 

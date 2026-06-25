@@ -38,62 +38,42 @@ _CROP_KEYWORDS = [
 class SyngentaScraper(BaseScraper):
     source = "syngenta"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._client = httpx.Client(
-            timeout=30,
-            follow_redirects=True,
-            headers=get_browser_headers(referer=_BASE_URL),
-        )
-
     def scrape(self) -> List[RawProduct]:
         products: List[RawProduct] = []
-        try:
-            product_urls = self._get_product_urls()
-            logger.info("Syngenta: found %d product URLs", len(product_urls))
+        product_urls = self._get_product_urls()
+        logger.info("Syngenta: found %d product URLs", len(product_urls))
 
-            for url in product_urls[:80]:  # respect rate limit
-                try:
-                    product = self._scrape_product_page(url)
-                    if product:
-                        products.append(product)
-                    random_delay(2.0, 4.0)
-                except Exception as exc:
-                    logger.warning("Syngenta product page failed url=%s: %s", url, exc)
-        finally:
-            self._client.close()
+        for url in product_urls[:80]:
+            try:
+                product = self._scrape_product_page(url)
+                if product:
+                    products.append(product)
+                random_delay(2.0, 4.0)
+            except Exception as exc:
+                logger.warning("Syngenta product page failed url=%s: %s", url, exc)
 
         logger.info("Syngenta scrape complete: %d products", len(products))
         return products
 
     def _get_product_urls(self) -> List[str]:
-        resp = self._client.get(_CATALOG_URL)
-        resp.raise_for_status()
-        html = resp.text
-
+        html = self._fetch_html(_CATALOG_URL, referer=_BASE_URL)
         if detect_block(html):
             raise BlockedError("Syngenta catalog page is blocked")
 
         soup = BeautifulSoup(html, "html.parser")
         urls: List[str] = []
-
         for link in soup.select("a[href]"):
             href = link.get("href", "")
             if "/producto" in href or "/product" in href:
                 full_url = urljoin(_BASE_URL, href)
                 if full_url not in urls:
                     urls.append(full_url)
-
         return urls
 
     def _scrape_product_page(self, url: str) -> Optional[RawProduct]:
-        resp = self._client.get(url, headers=get_browser_headers(referer=_CATALOG_URL))
-        resp.raise_for_status()
-        html = resp.text
-
+        html = self._fetch_html(url, referer=_CATALOG_URL)
         if detect_block(html):
             raise BlockedError(f"Syngenta product page blocked: {url}")
-
         soup = BeautifulSoup(html, "html.parser")
         return self._parse_product_page(soup, url, html)
 

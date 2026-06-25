@@ -51,28 +51,12 @@ class AgrofyScraper(BaseScraper):
         return products
 
     def _fetch_page(self, url: str) -> str:
-        if _PLAYWRIGHT_SERVICE_URL:
-            return self._fetch_via_playwright_service(url)
-        return self._fetch_direct(url)
-
-    def _fetch_via_playwright_service(self, url: str) -> str:
-        with httpx.Client(timeout=60) as client:
-            resp = client.post(
-                f"{_PLAYWRIGHT_SERVICE_URL}/render",
-                json={"url": url, "wait_for": ".product-item, .andes-card", "timeout": 15000},
-            )
-            resp.raise_for_status()
-            return resp.json().get("html", "")
-
-    def _fetch_direct(self, url: str) -> str:
-        with httpx.Client(
-            timeout=30,
-            headers=get_browser_headers(referer="https://www.agrofy.com.ar/"),
-            follow_redirects=True,
-        ) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            return resp.text
+        # CF Browser Rendering espera a que carguen las cards del producto
+        return self._fetch_html(
+            url,
+            wait_selector=".product-item, .andes-card, .ui-search-result",
+            referer="https://www.agrofy.com.ar/",
+        )
 
     def _scrape_category(self, category: str) -> List[RawProduct]:
         url = f"{_BASE_SEARCH}/{category}"

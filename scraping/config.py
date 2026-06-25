@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_MINUTES: int = 1440
 
+    # Cloudflare Browser Rendering (optional — habilita scraping anti-403)
+    CLOUDFLARE_ACCOUNT_ID: str = ""
+    CLOUDFLARE_API_TOKEN: str = ""
+
     # App
     DEBUG: bool = False
 

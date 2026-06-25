@@ -38,30 +38,19 @@ _TYPE_KEYWORDS = {
 class BasfScraper(BaseScraper):
     source = "basf"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._client = httpx.Client(
-            timeout=30,
-            follow_redirects=True,
-            headers=get_browser_headers(referer=_BASE_URL),
-        )
-
     def scrape(self) -> List[RawProduct]:
         products: List[RawProduct] = []
-        try:
-            product_urls = self._get_product_urls()
-            logger.info("BASF: found %d product URLs", len(product_urls))
+        product_urls = self._get_product_urls()
+        logger.info("BASF: found %d product URLs", len(product_urls))
 
-            for url in product_urls[:80]:
-                try:
-                    product = self._scrape_product_page(url)
-                    if product:
-                        products.append(product)
-                    random_delay(2.0, 4.5)
-                except Exception as exc:
-                    logger.warning("BASF product page failed url=%s: %s", url, exc)
-        finally:
-            self._client.close()
+        for url in product_urls[:80]:
+            try:
+                product = self._scrape_product_page(url)
+                if product:
+                    products.append(product)
+                random_delay(2.0, 4.5)
+            except Exception as exc:
+                logger.warning("BASF product page failed url=%s: %s", url, exc)
 
         logger.info("BASF scrape complete: %d products", len(products))
         return products
@@ -69,9 +58,7 @@ class BasfScraper(BaseScraper):
     def _get_product_urls(self) -> List[str]:
         for catalog_url in [_CATALOG_URL, _ALT_CATALOG_URL]:
             try:
-                resp = self._client.get(catalog_url)
-                resp.raise_for_status()
-                html = resp.text
+                html = self._fetch_html(catalog_url, referer=_BASE_URL)
                 if detect_block(html):
                     continue
                 return self._extract_urls_from_catalog(html, catalog_url)
