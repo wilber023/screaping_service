@@ -66,10 +66,10 @@ def render_page(
             "timeout": 30000,
         }
     else:
-        # Espera a que #challenge-form desaparezca: cuando el challenge CF se resuelve
-        # y redirige al sitio real, ese elemento deja de existir
+        # .ray-id existe SIEMPRE en CF Turnstile challenge pages, NUNCA en páginas reales
+        # hidden:True espera a que desaparezca → indica redirect al sitio real completado
         payload["waitForSelector"] = {
-            "selector": "#challenge-form, #cf-challenge-running",
+            "selector": ".ray-id",
             "hidden": True,
             "timeout": 30000,
         }
