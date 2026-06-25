@@ -1,8 +1,5 @@
 FROM python:3.11-slim
 
-LABEL maintainer="AgroGraph Team"
-LABEL service="agrograph-api"
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -10,7 +7,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System dependencies for psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
@@ -23,7 +19,5 @@ COPY . .
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
-
-CMD ["uvicorn", "scraping.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Uses $PORT if set (Render injects it), otherwise defaults to 8000
+CMD ["sh", "-c", "alembic upgrade head && uvicorn scraping.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

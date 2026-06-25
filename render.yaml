@@ -1,0 +1,119 @@
+services:
+  # ─────────────────────────────────────────────────────────────
+  # API Web Service  (plan free — se suspende tras 15 min idle)
+  # ─────────────────────────────────────────────────────────────
+  - type: web
+    name: agrograph-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn scraping.api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agrograph-db
+          property: connectionString
+      # Redis — pegar URL de Upstash (https://upstash.com, plan free) o Render Redis
+      - key: REDIS_URL
+        value: ""
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_KEY_FRONTEND
+        generateValue: true
+      - key: API_KEY_LLM
+        generateValue: true
+      # S3 — dejar vacío para deshabilitar snapshots, o poner credenciales reales
+      - key: S3_BUCKET
+        value: ""
+      - key: S3_ACCESS_KEY
+        value: ""
+      - key: S3_SECRET_KEY
+        value: ""
+      - key: S3_REGION
+        value: us-east-1
+      - key: S3_ENDPOINT_URL
+        value: ""
+      - key: PROXY_LIST
+        value: ""
+      - key: SCRAPE_INTERVAL_HOURS
+        value: "6"
+      - key: DEBUG
+        value: "false"
+
+  # ─────────────────────────────────────────────────────────────
+  # Celery Worker  (requiere plan Starter $7/mes o superior)
+  # Sin Redis URL configurado, este servicio arrancará pero no
+  # procesará tareas — configurar REDIS_URL primero.
+  # ─────────────────────────────────────────────────────────────
+  - type: worker
+    name: agrograph-worker
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A scraping.workers.celery_worker worker --loglevel=info --concurrency=2
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agrograph-db
+          property: connectionString
+      - key: REDIS_URL
+        value: ""
+      - key: JWT_SECRET
+        sync: false
+      - key: API_KEY_FRONTEND
+        sync: false
+      - key: API_KEY_LLM
+        sync: false
+      - key: S3_BUCKET
+        value: ""
+      - key: S3_ACCESS_KEY
+        value: ""
+      - key: S3_SECRET_KEY
+        value: ""
+      - key: PROXY_LIST
+        value: ""
+      - key: SCRAPE_INTERVAL_HOURS
+        value: "6"
+
+  # ─────────────────────────────────────────────────────────────
+  # Celery Beat Scheduler  (requiere plan Starter $7/mes)
+  # ─────────────────────────────────────────────────────────────
+  - type: worker
+    name: agrograph-scheduler
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A scraping.workers.celery_worker beat --loglevel=info
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agrograph-db
+          property: connectionString
+      - key: REDIS_URL
+        value: ""
+      - key: JWT_SECRET
+        sync: false
+      - key: API_KEY_FRONTEND
+        sync: false
+      - key: API_KEY_LLM
+        sync: false
+      - key: S3_BUCKET
+        value: ""
+      - key: S3_ACCESS_KEY
+        value: ""
+      - key: S3_SECRET_KEY
+        value: ""
+
+# ─────────────────────────────────────────────────────────────
+# PostgreSQL  (plan free — disponible en cuentas nuevas)
+# ─────────────────────────────────────────────────────────────
+databases:
+  - name: agrograph-db
+    databaseName: agrograph
+    user: agrograph
+    region: oregon
+    plan: free

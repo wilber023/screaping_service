@@ -1,20 +1,20 @@
 from __future__ import annotations
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
-from typing import Optional, List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
-    # Database
+    # Database (required)
     DATABASE_URL: str
 
-    # Redis
-    REDIS_URL: str
+    # Redis — optional; caching is disabled gracefully when not set
+    REDIS_URL: str = ""
 
-    # S3
-    S3_BUCKET: str
-    S3_ACCESS_KEY: str
-    S3_SECRET_KEY: str
+    # S3 — optional; snapshot archival skipped when not set
+    S3_BUCKET: str = ""
+    S3_ACCESS_KEY: str = ""
+    S3_SECRET_KEY: str = ""
     S3_REGION: str = "us-east-1"
     S3_ENDPOINT_URL: Optional[str] = None
 
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     PROXY_LIST: str = ""
     SCRAPE_INTERVAL_HOURS: int = 6
 
-    # Auth
+    # Auth (required)
     API_KEY_FRONTEND: str
     API_KEY_LLM: str
     JWT_SECRET: str

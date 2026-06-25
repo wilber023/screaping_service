@@ -10,9 +10,12 @@ _CURRENCY_PATTERNS = {
     "BRL": [r"brl", r"r\$", r"reais?"],
 }
 
+# Two alternatives (tried left-to-right by the engine):
+# 1. Thousands-formatted: 1-3 digits + one or more sep+3digit groups + optional decimal
+# 2. Plain number: any digits + optional decimal
+# This correctly handles "1500,00" (option 2 → 1500.0) vs "1,500" (option 1 → 1500)
 _AMOUNT_RE = re.compile(
-    r"([\d]{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d{1,4})?)",
-    re.IGNORECASE,
+    r"(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,4})?|\d+(?:[.,]\d{1,4})?)"
 )
 
 
