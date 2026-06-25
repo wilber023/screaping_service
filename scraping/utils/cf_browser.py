@@ -52,7 +52,7 @@ def render_page(
     payload = {
         "url": url,
         "gotoOptions": {
-            "waitUntil": "domcontentloaded",
+            "waitUntil": "networkidle2",
             "timeout": timeout_ms,
         },
         "rejectResourceTypes": ["image", "font", "media"],
