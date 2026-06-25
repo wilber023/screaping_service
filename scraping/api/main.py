@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from scraping.api.routes import products, crops, diseases, admin, llm
+from scraping.api.routes import products, crops, diseases, admin, llm, auth
 from scraping.config import settings
 from scraping.utils.logging_config import setup_logging
 
@@ -48,8 +48,9 @@ def health_check():
     return {"status": "ok", "service": "agrograph-scraping-api"}
 
 
+app.include_router(auth.router,     prefix="/auth",     tags=["auth"])
 app.include_router(products.router, prefix="/products", tags=["products"])
-app.include_router(crops.router, prefix="/crops", tags=["crops"])
+app.include_router(crops.router,    prefix="/crops",    tags=["crops"])
 app.include_router(diseases.router, prefix="/diseases", tags=["diseases"])
-app.include_router(llm.router, prefix="/llm", tags=["llm"])
-app.include_router(admin.router, prefix="/admin", tags=["admin"])
+app.include_router(llm.router,      prefix="/llm",      tags=["llm"])
+app.include_router(admin.router,    prefix="/admin",    tags=["admin"])
