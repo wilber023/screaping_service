@@ -49,26 +49,24 @@ def render_page(
         logger.debug("CF Browser rate-limit: esperando %.1fs", wait)
         time.sleep(wait)
 
+    # Selector por defecto: footer/nav son universales en páginas reales
+    # pero NO existen en el challenge page de Cloudflare ("Just a moment...")
+    # waitForSelector mantiene el browser vivo ~25s mientras el challenge se resuelve
+    final_selector = wait_selector or "footer, header nav, .navbar, #header, [class*='site-header']"
+
     payload = {
         "url": url,
         "gotoOptions": {
-            "waitUntil": "domcontentloaded",  # carga rápida; waitForFunction maneja el challenge
+            "waitUntil": "networkidle0",
             "timeout": timeout_ms,
         },
-        # Espera hasta que el título deje de ser el challenge de CF ("Just a moment...")
-        "waitForFunction": {
-            "pageFunction": "() => document.title !== 'Just a moment...'",
-            "timeout": timeout_ms,
-            "polling": 1000,
+        "waitForSelector": {
+            "selector": final_selector,
+            "timeout": 25000,
         },
         "rejectResourceTypes": ["image", "font", "media"],
         "bestAttempt": True,
     }
-    if wait_selector:
-        payload["waitForSelector"] = {
-            "selector": wait_selector,
-            "timeout": min(timeout_ms, 30000),
-        }
 
     headers = {
         "Authorization": f"Bearer {api_token}",
