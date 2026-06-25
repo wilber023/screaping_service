@@ -55,13 +55,15 @@ if [ -n "$missing" ]; then
 fi
 echo "      .env validado OK"
 
-# ── 4. Build y levantar servicios ─────────────────────────────────────────────
-echo "[4/6] Construyendo imágenes y levantando servicios..."
+# ── 4. Build y levantar solo postgres + redis primero ────────────────────────
+echo "[4/6] Construyendo imágenes..."
 docker-compose pull postgres redis 2>/dev/null || true
 docker-compose build --no-cache
-docker-compose up -d
 
-# ── 5. Esperar a que PostgreSQL esté listo y correr migraciones ───────────────
+echo "      Levantando postgres y redis..."
+docker-compose up -d postgres redis
+
+# ── 5. Esperar PostgreSQL y correr migraciones ANTES de levantar la API ───────
 echo "[5/6] Esperando a PostgreSQL..."
 attempt=0
 until docker-compose exec -T postgres pg_isready -U "$(grep POSTGRES_USER .env | cut -d= -f2)" &>/dev/null; do
@@ -77,8 +79,11 @@ done
 echo "      PostgreSQL listo."
 
 echo "      Corriendo migraciones Alembic..."
-docker-compose exec -T api alembic upgrade head
+docker-compose run --rm api alembic upgrade head
 echo "      Migraciones aplicadas."
+
+echo "      Levantando todos los servicios..."
+docker-compose up -d
 
 # ── 6. Verificar health de la API ─────────────────────────────────────────────
 echo "[6/6] Verificando API..."
