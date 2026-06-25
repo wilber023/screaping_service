@@ -3,7 +3,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from scraping.api.routes import products, crops, diseases, admin, llm, auth
 from scraping.config import settings
@@ -41,6 +41,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"error": "internal_server_error", "message": "An unexpected error occurred"},
     )
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return FileResponse("/app/test_productos.html")
 
 
 @app.get("/health", tags=["health"], summary="Health check (no auth required)")

@@ -16,8 +16,8 @@ from scraping.utils.anti_blocking import detect_block, random_delay, BlockedErro
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://agriculture.basf.com"
-_CATALOG_URL = f"{_BASE_URL}/mx/es/productos.html"
-_ALT_CATALOG_URL = "https://www.agro.basf.mx/es/productos.html"
+_CATALOG_URL = f"{_BASE_URL}/mx/es/crop-protection/products.html"
+_ALT_CATALOG_URL = f"{_BASE_URL}/mx/es/proteccion-de-cultivos/nuestros-productos.html"
 
 _CROP_KEYWORDS = [
     "calabaza", "frijol", "manzana", "mora", "cereza", "maíz", "maiz",
@@ -69,17 +69,19 @@ class BasfScraper(BaseScraper):
         return []
 
     def _extract_urls_from_catalog(self, html: str, base_url: str) -> List[str]:
-        base = base_url.rsplit("/", 2)[0]
         soup = BeautifulSoup(html, "html.parser")
         urls: List[str] = []
 
         for link in soup.select("a[href]"):
             href = link.get("href", "")
-            if not href:
+            if not href or href.startswith("#") or href.startswith("mailto"):
                 continue
-            if any(kw in href.lower() for kw in ["/producto", "/product", ".html"]):
-                full = urljoin(base, href)
-                if full not in urls and ("basf" in full.lower()):
+            full = urljoin(base_url, href)
+            if "basf" not in full.lower():
+                continue
+            # Acepta cualquier link de BASF que tenga indicadores de producto
+            if any(kw in full.lower() for kw in ["/product", "/producto", "/crop-protection", "/proteccion"]):
+                if full not in urls:
                     urls.append(full)
 
         return urls[:100]
