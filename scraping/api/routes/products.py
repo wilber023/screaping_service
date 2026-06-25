@@ -53,7 +53,7 @@ def list_products(
     query = db.query(Product).filter(Product.is_active == True)
 
     if crop:
-        query = query.filter(Product.target_crops.contains([crop]))
+        query = query.filter(sa.cast(Product.target_crops, sa.Text).ilike(f'%"{crop}"%'))
     if product_type:
         query = query.filter(Product.product_type == product_type)
     if manufacturer:
