@@ -49,24 +49,30 @@ def render_page(
         logger.debug("CF Browser rate-limit: esperando %.1fs", wait)
         time.sleep(wait)
 
-    # Selector por defecto: footer/nav son universales en páginas reales
-    # pero NO existen en el challenge page de Cloudflare ("Just a moment...")
-    # waitForSelector mantiene el browser vivo ~25s mientras el challenge se resuelve
-    final_selector = wait_selector or "footer, header nav, .navbar, #header, [class*='site-header']"
-
     payload = {
         "url": url,
         "gotoOptions": {
-            "waitUntil": "networkidle0",
+            "waitUntil": "domcontentloaded",
             "timeout": timeout_ms,
-        },
-        "waitForSelector": {
-            "selector": final_selector,
-            "timeout": 25000,
         },
         "rejectResourceTypes": ["image", "font", "media"],
         "bestAttempt": True,
     }
+
+    if wait_selector:
+        # Espera a que aparezcan los cards/contenido específicos del sitio
+        payload["waitForSelector"] = {
+            "selector": wait_selector,
+            "timeout": 30000,
+        }
+    else:
+        # Espera a que #challenge-form desaparezca: cuando el challenge CF se resuelve
+        # y redirige al sitio real, ese elemento deja de existir
+        payload["waitForSelector"] = {
+            "selector": "#challenge-form, #cf-challenge-running",
+            "hidden": True,
+            "timeout": 30000,
+        }
 
     headers = {
         "Authorization": f"Bearer {api_token}",
