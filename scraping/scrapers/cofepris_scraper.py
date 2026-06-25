@@ -1,14 +1,14 @@
 """
 COFEPRIS scraper — Registro oficial de plaguicidas de México.
-Fuente: Comisión Federal para la Protección contra Riesgos Sanitarios (gob.mx)
-Sin anti-bot: sitio gubernamental de acceso libre.
 
-Estrategia:
-  1. Intentar descargar el Excel/CSV de la lista de plaguicidas registrados
-  2. Si falla, raspar la tabla HTML de búsqueda
+Estrategias en orden:
+  1. datos.gob.mx CKAN API  → JSON sin challenge, da URL directa del Excel
+  2. URLs directas de Excel  → archivos estáticos que bypasan el WAF
+  3. CF Browser Rendering    → para descubrir el link cuando las otras fallan
 """
 from __future__ import annotations
 import io
+import json
 import logging
 from typing import List, Optional
 from urllib.parse import urljoin
@@ -21,18 +21,33 @@ from scraping.utils.headers import get_browser_headers
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://www.gob.mx"
+_BASE_GOB = "https://www.gob.mx"
 
-# Páginas candidatas con listas de plaguicidas registrados
-_CATALOG_URLS = [
-    "https://www.gob.mx/cofepris/documentos/plaguicidas-y-nutrientes-vegetales",
-    "https://www.gob.mx/cofepris/documentos/plaguicidas-y-nutrientes-vegetales-registrados",
-    "https://www.gob.mx/cms/uploads/attachment/file/",  # base para Excel
+# CKAN API de datos.gob.mx — devuelve JSON con metadatos y URL de descarga
+_CKAN_SEARCH = (
+    "https://datos.gob.mx/api/3/action/package_search"
+    "?q=cofepris+plaguicidas&rows=10"
+)
+_CKAN_PKG = (
+    "https://datos.gob.mx/api/3/action/package_show?id="
+    "registro-de-plaguicidas-y-nutrientes-vegetales"
+)
+
+# URLs directas de Excel que COFEPRIS ha publicado históricamente.
+# Los archivos estáticos en /cms/uploads/ suelen bypass el WAF.
+_DIRECT_EXCEL_URLS = [
+    # Ajusta estos IDs si COFEPRIS actualiza el archivo
+    "https://www.gob.mx/cms/uploads/attachment/file/783559/Plaguicidas_y_Nutrientes_Vegetales_Registrados.xlsx",
+    "https://www.gob.mx/cms/uploads/attachment/file/783559/plaguicidas_registrados.xlsx",
+    "https://www.cofepris.gob.mx/Documents/Plaguicidas/Plaguicidas_Registrados.xlsx",
+    "https://www.cofepris.gob.mx/Documents/Plaguicidas/lista_plaguicidas.xlsx",
 ]
 
-# Búsqueda directa en el portal de COFEPRIS
-_SEARCH_URL = "https://www.cofepris.gob.mx/busqueda/plaguicidas/"
-_SEARCH_API  = "https://www.cofepris.gob.mx/AZ/Paginas/Plaguicidas/ConsultaPlaguicidas.aspx"
+# Páginas HTML donde COFEPRIS enlaza el Excel (se intentan vía CF Browser)
+_HTML_PAGES = [
+    "https://www.gob.mx/cofepris/documentos/plaguicidas-y-nutrientes-vegetales",
+    "https://www.gob.mx/cofepris/documentos/plaguicidas-y-nutrientes-vegetales-registrados",
+]
 
 _CROP_KEYWORDS = [
     "calabaza", "frijol", "manzana", "mora", "cereza", "maíz", "maiz",
@@ -59,86 +74,148 @@ class CofeprisScraper(BaseScraper):
 
     def __init__(self) -> None:
         super().__init__()
-        self._client = httpx.Client(
-            timeout=30,
+        self._http = httpx.Client(
+            timeout=60,
             follow_redirects=True,
             headers=get_browser_headers(),
         )
 
     def scrape(self) -> List[RawProduct]:
-        products: List[RawProduct] = []
-
-        # Intento 1: descargar Excel/CSV publicado por COFEPRIS
-        products = self._try_download_excel()
+        # 1. datos.gob.mx CKAN API
+        products = self._try_ckan_api()
         if products:
-            logger.info("COFEPRIS: %d productos desde Excel", len(products))
+            logger.info("COFEPRIS CKAN: %d productos", len(products))
             return products
 
-        # Intento 2: raspar tablas HTML del portal
-        products = self._try_html_table()
+        # 2. URLs directas de Excel
+        products = self._try_direct_excel_urls()
         if products:
-            logger.info("COFEPRIS: %d productos desde HTML", len(products))
+            logger.info("COFEPRIS Excel directo: %d productos", len(products))
             return products
 
-        # Intento 3: búsqueda paginada en el portal antiguo
-        products = self._try_search_pagination()
-        logger.info("COFEPRIS: %d productos desde búsqueda", len(products))
+        # 3. CF Browser Rendering para descubrir link del Excel
+        products = self._try_cf_browser_discovery()
+        logger.info("COFEPRIS CF Browser: %d productos", len(products))
         return products
 
-    # ── Intento 1: Excel ──────────────────────────────────────────────────────
+    # ── 1. CKAN API ───────────────────────────────────────────────────────────
 
-    def _try_download_excel(self) -> List[RawProduct]:
-        for url in _CATALOG_URLS[:2]:
+    def _try_ckan_api(self) -> List[RawProduct]:
+        for url in [_CKAN_PKG, _CKAN_SEARCH]:
             try:
-                resp = self._client.get(url)
-                if resp.status_code != 200:
+                r = self._http.get(url, timeout=20)
+                if r.status_code != 200:
                     continue
-                soup = BeautifulSoup(resp.text, "html.parser")
-                # Buscar links a Excel o CSV
-                for link in soup.select("a[href]"):
-                    href = link.get("href", "")
-                    if any(ext in href.lower() for ext in [".xlsx", ".xls", ".csv"]):
-                        file_url = urljoin(_BASE, href)
-                        result = self._parse_excel(file_url)
-                        if result:
-                            return result
+                data = r.json()
+                if not data.get("success"):
+                    continue
+
+                result = data.get("result", {})
+                # package_show devuelve un dict; package_search devuelve {results:[...]}
+                packages = [result] if isinstance(result, dict) else result.get("results", [])
+
+                for pkg in packages:
+                    for resource in pkg.get("resources", []):
+                        dl_url = resource.get("url", "")
+                        fmt = resource.get("format", "").lower()
+                        if any(e in dl_url.lower() or e == fmt for e in ["xlsx", "xls", "csv"]):
+                            logger.info("COFEPRIS CKAN: descargando %s", dl_url)
+                            products = self._download_and_parse_excel(dl_url)
+                            if products:
+                                return products
             except Exception as exc:
-                logger.debug("COFEPRIS Excel discovery failed: %s", exc)
+                logger.debug("COFEPRIS CKAN fallback: %s", exc)
         return []
 
-    def _parse_excel(self, url: str) -> List[RawProduct]:
+    # ── 2. URLs directas de Excel ─────────────────────────────────────────────
+
+    def _try_direct_excel_urls(self) -> List[RawProduct]:
+        for url in _DIRECT_EXCEL_URLS:
+            try:
+                r = self._http.head(url, timeout=15)
+                ct = r.headers.get("content-type", "")
+                if r.status_code == 200 and ("spreadsheet" in ct or "excel" in ct or "octet" in ct):
+                    products = self._download_and_parse_excel(url)
+                    if products:
+                        return products
+                elif r.status_code == 200:
+                    # HEAD puede no devolver content-type correcto; intenta GET
+                    products = self._download_and_parse_excel(url)
+                    if products:
+                        return products
+            except Exception as exc:
+                logger.debug("COFEPRIS direct url=%s: %s", url, exc)
+        return []
+
+    # ── 3. CF Browser Rendering ───────────────────────────────────────────────
+
+    def _try_cf_browser_discovery(self) -> List[RawProduct]:
+        for page_url in _HTML_PAGES:
+            try:
+                html = self._fetch_html(page_url)
+                if not html or len(html) < 2000:
+                    continue
+                soup = BeautifulSoup(html, "html.parser")
+                for a in soup.select("a[href]"):
+                    href = a.get("href", "")
+                    if any(ext in href.lower() for ext in [".xlsx", ".xls", ".csv"]):
+                        file_url = urljoin(_BASE_GOB, href)
+                        logger.info("COFEPRIS CF discovered: %s", file_url)
+                        products = self._download_and_parse_excel(file_url)
+                        if products:
+                            return products
+            except Exception as exc:
+                logger.debug("COFEPRIS CF browser failed url=%s: %s", page_url, exc)
+        return []
+
+    # ── Excel parser ──────────────────────────────────────────────────────────
+
+    def _download_and_parse_excel(self, url: str) -> List[RawProduct]:
         try:
             import openpyxl
-            resp = self._client.get(url, timeout=60)
-            if resp.status_code != 200:
+            r = self._http.get(url, timeout=120)
+            if r.status_code != 200:
+                logger.debug("COFEPRIS Excel download failed %s: HTTP %s", url, r.status_code)
                 return []
-            wb = openpyxl.load_workbook(io.BytesIO(resp.content), read_only=True, data_only=True)
+            # Detect challenge page (1883 bytes "Challenge Validation")
+            if len(r.content) < 5000 and b"Challenge" in r.content:
+                logger.debug("COFEPRIS Excel challenge page at %s", url)
+                return []
+
+            content_type = r.headers.get("content-type", "")
+            # Check it's actually an Excel file
+            if "html" in content_type and b"<html" in r.content[:200]:
+                logger.debug("COFEPRIS got HTML instead of Excel at %s", url)
+                return []
+
+            wb = openpyxl.load_workbook(io.BytesIO(r.content), read_only=True, data_only=True)
             ws = wb.active
             rows = list(ws.iter_rows(values_only=True))
             if not rows:
                 return []
 
-            # Detectar header row
             headers = [str(c or "").lower().strip() for c in rows[0]]
             col = {h: i for i, h in enumerate(headers)}
+            logger.info("COFEPRIS Excel headers: %s", headers[:10])
 
-            name_col  = self._find_col(col, ["nombre", "producto", "name"])
-            mfr_col   = self._find_col(col, ["titular", "fabricante", "empresa", "manufacturer"])
-            ing_col   = self._find_col(col, ["ingrediente", "ingrediente activo", "active", "i.a."])
-            type_col  = self._find_col(col, ["tipo", "category", "type", "clase"])
-            crop_col  = self._find_col(col, ["cultivo", "cultivos", "uso", "crop"])
-
+            name_col = self._find_col(col, ["nombre", "producto comercial", "producto", "name"])
             if name_col is None:
+                logger.warning("COFEPRIS: no name column found in %s", headers[:10])
                 return []
+
+            mfr_col  = self._find_col(col, ["titular", "fabricante", "empresa", "registrante"])
+            ing_col  = self._find_col(col, ["ingrediente activo", "ingrediente", "i.a.", "active"])
+            type_col = self._find_col(col, ["tipo", "clase", "category", "type"])
+            crop_col = self._find_col(col, ["cultivo", "cultivos", "uso", "crop"])
 
             products: List[RawProduct] = []
             for row in rows[1:]:
                 name = str(row[name_col] or "").strip()
-                if not name or name.lower() == "none":
+                if not name or name.lower() in ("none", "nombre", "producto"):
                     continue
-                mfr   = str(row[mfr_col]  or "").strip() if mfr_col  is not None else None
-                ing   = str(row[ing_col]  or "").strip() if ing_col  is not None else None
-                tipo  = str(row[type_col] or "").strip() if type_col is not None else ""
+                mfr      = str(row[mfr_col]  or "").strip() if mfr_col  is not None else None
+                ing      = str(row[ing_col]  or "").strip() if ing_col  is not None else None
+                tipo     = str(row[type_col] or "").strip() if type_col is not None else ""
                 crops_raw = str(row[crop_col] or "").strip() if crop_col is not None else ""
 
                 products.append(self._make_product(
@@ -149,95 +226,26 @@ class CofeprisScraper(BaseScraper):
                     crops_text=crops_raw,
                     url=url,
                 ))
-                if len(products) >= 500:
+                if len(products) >= 1000:
                     break
+
+            logger.info("COFEPRIS Excel parsed: %d productos de %s", len(products), url)
             return products
+
         except Exception as exc:
-            logger.warning("COFEPRIS parse_excel failed: %s", exc)
+            logger.warning("COFEPRIS parse_excel failed url=%s: %s", url, exc)
             return []
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _find_col(self, col_map: dict, candidates: list) -> Optional[int]:
         for c in candidates:
             if c in col_map:
                 return col_map[c]
-            for k, v in col_map.items():
+            for k in col_map:
                 if c in k:
-                    return v
+                    return col_map[k]
         return None
-
-    # ── Intento 2: HTML Table ─────────────────────────────────────────────────
-
-    def _try_html_table(self) -> List[RawProduct]:
-        for url in _CATALOG_URLS[:2]:
-            try:
-                resp = self._client.get(url)
-                if resp.status_code != 200:
-                    continue
-                soup = BeautifulSoup(resp.text, "html.parser")
-                tables = soup.select("table")
-                for table in tables:
-                    products = self._parse_html_table(table, url)
-                    if products:
-                        return products
-            except Exception as exc:
-                logger.debug("COFEPRIS HTML table failed: %s", exc)
-        return []
-
-    def _parse_html_table(self, table, source_url: str) -> List[RawProduct]:
-        rows = table.select("tr")
-        if len(rows) < 2:
-            return []
-        headers = [th.get_text(strip=True).lower() for th in rows[0].select("th, td")]
-        col = {h: i for i, h in enumerate(headers)}
-
-        name_col = self._find_col(col, ["nombre", "producto"])
-        if name_col is None:
-            return []
-
-        mfr_col  = self._find_col(col, ["titular", "fabricante", "empresa"])
-        ing_col  = self._find_col(col, ["ingrediente", "i.a."])
-        type_col = self._find_col(col, ["tipo", "clase"])
-        crop_col = self._find_col(col, ["cultivo", "uso"])
-
-        products = []
-        for row in rows[1:]:
-            cells = [td.get_text(strip=True) for td in row.select("td")]
-            if len(cells) <= name_col:
-                continue
-            name = cells[name_col].strip()
-            if not name:
-                continue
-            products.append(self._make_product(
-                name=name,
-                manufacturer=cells[mfr_col].strip() if mfr_col is not None and len(cells) > mfr_col else None,
-                ingredient=cells[ing_col].strip() if ing_col is not None and len(cells) > ing_col else None,
-                type_raw=cells[type_col].strip() if type_col is not None and len(cells) > type_col else "",
-                crops_text=cells[crop_col].strip() if crop_col is not None and len(cells) > crop_col else "",
-                url=source_url,
-            ))
-        return products
-
-    # ── Intento 3: Búsqueda paginada ──────────────────────────────────────────
-
-    def _try_search_pagination(self) -> List[RawProduct]:
-        products: List[RawProduct] = []
-        # Buscar por cada tipo de producto
-        for query in ["fungicida", "insecticida", "herbicida", "fertilizante"]:
-            try:
-                url = f"{_SEARCH_URL}?tipo={query}"
-                resp = self._client.get(url)
-                if resp.status_code != 200:
-                    continue
-                soup = BeautifulSoup(resp.text, "html.parser")
-                for table in soup.select("table"):
-                    products.extend(self._parse_html_table(table, url))
-                if len(products) >= 200:
-                    break
-            except Exception as exc:
-                logger.debug("COFEPRIS search failed query=%s: %s", query, exc)
-        return products
-
-    # ── Helper ────────────────────────────────────────────────────────────────
 
     def _make_product(
         self,
@@ -249,9 +257,8 @@ class CofeprisScraper(BaseScraper):
         url: str,
     ) -> RawProduct:
         tipo = "otro"
-        lower = type_raw.lower()
         for kw, mapped in _TYPE_MAP.items():
-            if kw in lower:
+            if kw in type_raw.lower():
                 tipo = mapped
                 break
 
