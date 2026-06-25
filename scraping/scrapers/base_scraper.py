@@ -28,6 +28,7 @@ class RawProduct:
     price_currency: Optional[str] = None
     stock_raw: Optional[str] = None
     availability_regions: List[str] = field(default_factory=list)
+    image_url: Optional[str] = None
     extra: dict = field(default_factory=dict)
     scraped_at: datetime = field(default_factory=datetime.utcnow)
     html_snapshot: Optional[str] = None

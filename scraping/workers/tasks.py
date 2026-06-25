@@ -120,6 +120,7 @@ def run_scraper(self, source: str) -> Dict[str, Any]:
                         availability_regions=normalized.availability_regions,
                         scraped_at=normalized.scraped_at,
                         hash_dedup=normalized.hash_dedup,
+                        image_url=getattr(normalized, "image_url", None),
                     )
                     db.add(product)
 

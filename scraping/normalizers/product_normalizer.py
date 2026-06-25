@@ -50,7 +50,7 @@ class NormalizedProduct:
         "product_type", "target_crops", "target_diseases",
         "price_amount", "price_currency", "price_original_currency",
         "price_last_updated", "stock_status", "stock_quantity",
-        "availability_regions", "scraped_at", "hash_dedup",
+        "availability_regions", "scraped_at", "hash_dedup", "image_url",
     )
 
     def __init__(self, **kwargs) -> None:
@@ -94,6 +94,7 @@ class ProductNormalizer:
             availability_regions=parsed.availability_regions,
             scraped_at=parsed.scraped_at,
             hash_dedup=parsed.hash_dedup,
+            image_url=getattr(parsed, "image_url", None),
         )
 
     @staticmethod

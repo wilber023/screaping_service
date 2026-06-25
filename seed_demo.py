@@ -17,7 +17,15 @@ Base.metadata.create_all(bind=engine)
 def h(*parts):
     return hashlib.sha256("|".join(parts).lower().encode()).hexdigest()
 
-def p(source, url, name, manufacturer, ingredient, tipo, crops, diseases, price, currency="MXN", regions=None, stock=50):
+_IMG = {
+    "fungicida":    "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&q=80",
+    "insecticida":  "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&q=80",
+    "herbicida":    "https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=400&q=80",
+    "fertilizante": "https://images.unsplash.com/photo-1591086430580-b4e2ceae6e91?w=400&q=80",
+    "otro":         "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&q=80",
+}
+
+def p(source, url, name, manufacturer, ingredient, tipo, crops, diseases, price, currency="MXN", regions=None, stock=50, img=None):
     return {
         "id": str(uuid.uuid4()),
         "source": source,
@@ -38,6 +46,7 @@ def p(source, url, name, manufacturer, ingredient, tipo, crops, diseases, price,
         "scraped_at": datetime.utcnow(),
         "hash_dedup": h(source, name, ingredient),
         "is_active": True,
+        "image_url": img or _IMG.get(tipo, _IMG["fungicida"]),
     }
 
 PRODUCTOS = [

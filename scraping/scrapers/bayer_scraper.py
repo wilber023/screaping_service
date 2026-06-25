@@ -107,6 +107,14 @@ class BayerScraper(BaseScraper):
         target_crops = [c for c in _CROP_KEYWORDS if c in full_text.lower()]
         target_diseases = self._extract_diseases(soup)
 
+        img_el = (
+            soup.select_one("img.product-image")
+            or soup.select_one("[class*='product-img'] img")
+            or soup.select_one("img[itemprop='image']")
+            or soup.select_one(".product-header img")
+        )
+        image_url = img_el.get("src") or img_el.get("data-src") if img_el else None
+
         return RawProduct(
             source=self.source,
             source_url=url,
@@ -116,6 +124,7 @@ class BayerScraper(BaseScraper):
             product_type_raw=product_type_raw,
             target_crops_raw=target_crops,
             target_diseases_raw=target_diseases,
+            image_url=image_url,
             availability_regions=["MX"],
             html_snapshot=html[:50000],
         )

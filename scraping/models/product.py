@@ -76,4 +76,5 @@ class Product(Base):
         DateTime, nullable=False, default=datetime.utcnow
     )
     hash_dedup: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    image_url: Mapped[str] = mapped_column(String(2048), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

@@ -163,4 +163,5 @@ def _serialize_product(product: Product, user_type: UserType) -> ProductResponse
         stock=stock,
         availability_regions=product.availability_regions or [],
         scraped_at=product.scraped_at,
+        image_url=product.image_url,
     )

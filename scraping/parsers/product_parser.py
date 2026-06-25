@@ -18,7 +18,7 @@ class ParsedProduct:
         "source", "source_url", "name", "manufacturer", "active_ingredient",
         "product_type_raw", "target_crops_raw", "target_diseases_raw",
         "price_amount", "price_currency", "stock_status", "stock_quantity",
-        "availability_regions", "scraped_at", "hash_dedup",
+        "availability_regions", "scraped_at", "hash_dedup", "image_url",
     )
 
     def __init__(
@@ -38,6 +38,7 @@ class ParsedProduct:
         availability_regions: list,
         scraped_at: datetime,
         hash_dedup: str,
+        image_url: Optional[str] = None,
     ) -> None:
         self.source = source
         self.source_url = source_url
@@ -54,6 +55,7 @@ class ParsedProduct:
         self.availability_regions = availability_regions
         self.scraped_at = scraped_at
         self.hash_dedup = hash_dedup
+        self.image_url = image_url
 
 
 class ProductParser:
@@ -94,6 +96,7 @@ class ProductParser:
             availability_regions=raw.availability_regions or [],
             scraped_at=raw.scraped_at,
             hash_dedup=hash_dedup,
+            image_url=raw.image_url,
         )
 
     @staticmethod
