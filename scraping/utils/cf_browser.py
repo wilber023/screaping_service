@@ -30,7 +30,6 @@ def is_available() -> bool:
 def render_page(
     url: str,
     wait_selector: Optional[str] = None,
-    wait_until: str = "networkidle0",
     timeout_ms: int = 60000,
 ) -> str:
     """
@@ -53,16 +52,22 @@ def render_page(
     payload = {
         "url": url,
         "gotoOptions": {
-            "waitUntil": wait_until,
+            "waitUntil": "domcontentloaded",  # carga rápida; waitForFunction maneja el challenge
             "timeout": timeout_ms,
         },
-        "rejectResourceTypes": ["image", "font", "media", "stylesheet"],
+        # Espera hasta que el título deje de ser el challenge de CF ("Just a moment...")
+        "waitForFunction": {
+            "pageFunction": "() => document.title !== 'Just a moment...'",
+            "timeout": timeout_ms,
+            "polling": 1000,
+        },
+        "rejectResourceTypes": ["image", "font", "media"],
         "bestAttempt": True,
     }
     if wait_selector:
         payload["waitForSelector"] = {
             "selector": wait_selector,
-            "timeout": min(timeout_ms, 15000),
+            "timeout": min(timeout_ms, 30000),
         }
 
     headers = {
