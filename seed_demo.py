@@ -216,6 +216,101 @@ PRODUCTOS = [
       "Wuxal Boro","Bayer","Nitrógeno 8% + Boro 9%",
       "fertilizante",["frijol","maiz","tomate","calabaza"],
       ["deficiencia de boro","aborto floral"],390),
+
+    # ── PRODUCTOS COMERCIALES MÉXICO (marcas locales, precio accesible) ───────
+    # Fungicidas comerciales
+    p("mercadolibre","https://www.mercadolibre.com.mx/consist-max-fungicida",
+      "Consist Max Fungicida Tebuconazole + Trifloxystrobin 200 mL","Consist Max",
+      "Tebuconazol 100 g/L + Trifloxistrobina 100 g/L",
+      "fungicida",["tomate","papa","fresa","maiz"],
+      ["tizón temprano","tizón tardío","botrytis","roya","alternaria","septoria"],775),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/prontius-fungicida",
+      "PRONTIUS Fungicida en Polvo Humectable 1 kg","PRONTIUS",
+      "Mancozeb 800 g/kg",
+      "fungicida",["tomate","papa","fresa","frijol"],
+      ["tizón tardío","alternaria","antracnosis","mancha foliar"],420),
+
+    # Insecticidas comerciales
+    p("mercadolibre","https://www.mercadolibre.com.mx/instar-abamectina",
+      "Insecticida Abamectina Minador Tomate Araña Instar AD 1 L","Instar",
+      "Abamectina 18 g/L",
+      "insecticida",["tomate","papa","fresa"],
+      ["minador de hoja","araña roja","trips","ácaros"],875),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/rotaprid-imidacloprid",
+      "Insecticida Agrícola Rotaprid (Imidacloprid) 200 mL","Rotam",
+      "Imidacloprid 350 g/L",
+      "insecticida",["tomate","maiz","papa","frijol","calabaza"],
+      ["mosca blanca","áfidos","chicharrita","minador de hoja","trips"],299),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/control-24e-950ml",
+      "Insecticida Líquido Control 24e 950 mL","Control",
+      "Clorpirifos etil 240 g/L",
+      "insecticida",["maiz","tomate","papa","frijol","calabaza"],
+      ["gusano cogollero","diabrótica","gallina ciega","pulgón"],599),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/diazinon-240ml",
+      "Insecticida Líquido Diazinon 240 mL","Diazinon",
+      "Diazinon 600 g/L",
+      "insecticida",["maiz","papa","frijol"],
+      ["gusano cogollero","gallina ciega","pulgón","chinche"],155),
+
+    # Herbicidas comerciales
+    p("mercadolibre","https://www.mercadolibre.com.mx/jeren-clethodim",
+      "Herbicida Selectivo Jitomate Jeren Clethodim 500 mL","Jeren",
+      "Clethodim 240 g/L",
+      "herbicida",["tomate","frijol","papa"],
+      ["zacate Johnson","pasto bermuda","gramíneas anuales"],790),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/hierbamina-herbicida",
+      "Hierbamina Herbicida Agrícola 1 L","Hierbamina",
+      "2,4-D amina 720 g/L",
+      "herbicida",["maiz","frijol"],
+      ["quelite","correhuela","verdolaga","hoja ancha"],190),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/atrazina-maiz",
+      "Herbicida Sellador Atrazina Para Maíz 1 kg","Genérico",
+      "Atrazina 900 g/kg",
+      "herbicida",["maiz"],
+      ["coquillo","cebadilla","maleza anual","gramíneas"],269),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/polar-90-maiz",
+      "Polar 90 Sellador Para Maíz 1 kg","Polar",
+      "Pendimetalina 900 g/kg",
+      "herbicida",["maiz"],
+      ["coquillo","quelite","verdolaga","maleza pre-emergente"],349),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/legacy-mesotriona",
+      "Legacy Mesotriona Control Coquillo Maíz Sorgo Caña 350 mL","Legacy",
+      "Mesotriona 100 g/L",
+      "herbicida",["maiz"],
+      ["coquillo","quelite","verdolaga","pasto johnson"],766),
+
+    # Fertilizantes específicos cultivos
+    p("mercadolibre","https://www.mercadolibre.com.mx/ultrasol-tomate",
+      "Fertilizante Ultrasol Tomate 15-09-26 Polvo Saco 25 kg","SQM Ultrasol",
+      "N 15% + P2O5 9% + K2O 26%",
+      "fertilizante",["tomate","fresa"],
+      ["deficiencia nutricional","clorosis","cuajado deficiente"],1449),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/novatec-npk",
+      "Novatec Premium NPK Frutales Hortalizas Maíz Papa 25 kg","Novatec",
+      "N 15% + P2O5 3% + K2O 20% + S 2% + microelementos",
+      "fertilizante",["tomate","papa","maiz","fresa","frijol"],
+      ["deficiencia nutricional","bajo rendimiento"],1450),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/humus-lombriz",
+      "Humus de Lombriz Vita Rancho Los Molinos 5 kg","Vita Rancho",
+      "Materia orgánica 40%+",
+      "fertilizante",["tomate","papa","maiz","fresa","frijol","mora","calabaza"],
+      ["deficiencia de materia orgánica","suelo compactado"],99),
+
+    p("mercadolibre","https://www.mercadolibre.com.mx/enmienda-tomate",
+      "Enmienda Orgánica para Suelo Tomates Mezcla para Cultivo 10 kg","AgroOrgánico",
+      "Compost + humus + micorrizas",
+      "fertilizante",["tomate","fresa","papa"],
+      ["deficiencia de materia orgánica","suelo pobre"],744),
 ]
 
 
