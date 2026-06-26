@@ -1,109 +1,381 @@
-# AgroGraph Scraping API
+# AgroGraph — Microservicio de Catálogo Agrícola
 
-Servicio de catálogo agrícola dinámico para AgroGraph. Obtiene, normaliza y centraliza información de productos fitosanitarios (fungicidas, insecticidas, herbicidas, fertilizantes) para los **14 cultivos** principales, desde múltiples fuentes (Agrofy, MercadoLibre, Syngenta, Bayer, BASF), y los expone vía API REST para ser consumidos por el módulo de diagnóstico de IA y el frontend de AgroGraph.
+Microservicio de scraping, normalización y API REST de productos fitosanitarios para el sistema **AgroGraph**. Extrae productos **reales** de marketplaces en línea (Amazon México), los normaliza y los expone como API para el módulo de diagnóstico por IA y el frontend web.
+
+> **Los productos del catálogo son reales.** Provienen de páginas públicas de venta en línea en México, con precios, imágenes y descripciones tal como aparecen en los sitios de origen. Los únicos productos con datos de referencia curada son los etiquetados como `source: syngenta / bayer / basf / mercadolibre` en el seed inicial.
 
 ---
 
 ## Tabla de contenidos
 
 1. [Descripción general](#1-descripción-general)
-2. [Cómo desplegar en EC2](#2-cómo-desplegar-en-ec2)
-3. [Security Groups requeridos](#3-security-groups-requeridos-en-la-ec2)
-4. [Autenticación](#4-autenticación)
-5. [Catálogo de endpoints](#5-catálogo-de-endpoints)
-6. [Guía de integración para el LLM](#6-guía-de-integración-para-el-llm)
-7. [Guía de integración para el Frontend](#7-guía-de-integración-para-el-frontend)
-8. [Variables de entorno](#8-variables-de-entorno)
-9. [Troubleshooting del deploy](#9-troubleshooting-del-deploy)
+2. [Técnica de extracción — Qué es y cómo funciona el web scraping](#2-técnica-de-extracción)
+3. [Fuentes de datos y productos reales](#3-fuentes-de-datos)
+4. [Pipeline de datos](#4-pipeline-de-datos)
+5. [Stack tecnológico](#5-stack-tecnológico)
+6. [Despliegue en EC2](#6-despliegue-en-ec2)
+7. [Autenticación](#7-autenticación)
+8. [Endpoints de la API](#8-endpoints-de-la-api)
+9. [Integración con el LLM](#9-integración-con-el-llm)
+10. [Variables de entorno](#10-variables-de-entorno)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
 ## 1. Descripción general
 
-### Cultivos soportados
-`calabaza` · `frijol` · `manzana` · `mora` · `cereza` · `maíz` · `durazno` · `uva` · `naranja` · `pimienta` · `papa` · `frambuesa` · `soja` · `fresa` · `tomate`
+AgroGraph Scraping es un **microservicio independiente** que:
 
-### Fuentes de datos
-| Fuente | Tipo | País principal |
+1. Extrae productos fitosanitarios de marketplaces mexicanos usando técnicas de web scraping con bypass de protecciones anti-bot
+2. Normaliza nombres, precios (MXN), cultivos objetivo y enfermedades
+3. Almacena en PostgreSQL con historial de precios
+4. Expone una API REST que el módulo LLM usa para generar recomendaciones costo-beneficio
+
+### Cultivos objetivo (7)
+
+| Cultivo | Categoría | Plagas/enfermedades principales |
 |---|---|---|
-| Agrofy | Marketplace agrícola (headless browser) | Argentina |
-| MercadoLibre | API pública REST | México |
-| Syngenta | Catálogo oficial del fabricante | México |
-| Bayer CropScience | Catálogo oficial del fabricante | México |
-| BASF | Catálogo oficial del fabricante | México |
-
-### Stack tecnológico
-- **API:** FastAPI 0.111 + Uvicorn
-- **Workers:** Celery 5.4 + Redis (broker)
-- **Scheduler:** Celery Beat (jobs periódicos cada 6-12h)
-- **DB:** PostgreSQL 16
-- **Cache:** Redis 7
-- **Snapshots:** AWS S3 (archival de HTML crudo)
-- **Headless scraping:** Playwright (contenedor dedicado)
+| **Tomate** | Hortaliza | Tizón tardío, mildiu, botrytis, mosca blanca, minador |
+| **Papa** | Tubérculo | Tizón tardío, Phytophthora, rhizoctonia, pulgón |
+| **Fresa** | Fruta | Botrytis, oidio, araña roja, trips |
+| **Maíz** | Cereal | Gusano cogollero, roya, coquillo, zacate Johnson |
+| **Frijol** | Leguminosa | Antracnosis, roya, pulgón, diabrótica |
+| **Mora** | Fruta | Botrytis, monilia, oidio |
+| **Calabaza** | Hortaliza | Cenicilla, mosca blanca, áfidos |
 
 ---
 
-## 2. Cómo desplegar en EC2
+## 2. Técnica de extracción
 
-### Requisitos previos
-- Instancia EC2 con Amazon Linux 2023 o Ubuntu 22.04/24.04
-- La instancia debe tener al menos **t3.medium** (2 vCPU, 4 GB RAM recomendado por Playwright)
-- Un archivo `.env` correctamente configurado (ver [sección 8](#8-variables-de-entorno))
-- Acceso SSH a la instancia
-- Security Groups habilitados (ver [sección 3](#3-security-groups-requeridos-en-la-ec2))
+### ¿Qué es web scraping?
 
-### Despliegue
+Web scraping es la extracción automatizada de datos de páginas web públicas. El programa accede a la misma URL que un navegador humano, descarga el HTML de la página y extrae información estructurada (nombres, precios, imágenes).
 
-```bash
-# 1. Conectarse a la EC2
-ssh -i tu-key.pem ec2-user@<ip-publica>
+En México, el scraping de páginas públicas para uso informativo es una práctica legal y común en el ámbito de la investigación de mercados, siempre que no se vulneren sistemas de seguridad ni se usen los datos con fines fraudulentos.
 
-# 2. Clonar o subir el proyecto
-git clone <repo-url> /opt/agrograph-scraping
-cd /opt/agrograph-scraping
+### Problema: protecciones anti-bot
 
-# 3. Configurar variables de entorno
-cp .env.example .env
-nano .env   # completar todos los valores requeridos
+Los sitios de e-commerce modernos (Amazon, MercadoLibre) detectan bots mediante:
 
-# 4. Un único comando para desplegar todo
-chmod +x deploy.sh
-./deploy.sh
+| Protección | Cómo funciona |
+|---|---|
+| **TLS Fingerprinting** | Verifica que el handshake SSL sea de un navegador real, no de Python/requests |
+| **Cloudflare Turnstile** | Desafío JavaScript que valida comportamiento humano |
+| **Akamai WAF** | Analiza patrones de tráfico y bloquea IPs de datacenter conocidas |
+| **User-Agent detection** | Rechaza peticiones con headers de librerías HTTP genéricas |
+| **Rate limiting** | Bloquea si se hacen muchas peticiones en poco tiempo |
+
+### Solución: Cascada de 3 estrategias
+
+El sistema usa una cascada inteligente definida en [scraping/scrapers/base_scraper.py](scraping/scrapers/base_scraper.py):
+
+```
+Intento 1: cloudscraper (bypass de TLS fingerprinting)
+    ↓ Si falla o devuelve página de desafío
+Intento 2: CF Browser Rendering API (Chromium headless real)
+    ↓ Si no está disponible o falla
+Intento 3: httpx directo + proxy (si PROXY_URL configurado)
 ```
 
-El script `deploy.sh` se encarga de:
-1. Instalar Docker y Docker Compose si no están presentes (compatible con Amazon Linux 2023 y Ubuntu)
-2. Validar que `.env` tenga todos los valores necesarios
-3. Construir las imágenes Docker
-4. Levantar todos los servicios
-5. Esperar a que Postgres y Redis estén sanos (`HEALTHCHECK`)
-6. Ejecutar las migraciones de base de datos (`alembic upgrade head`)
-7. Verificar que la API responde en `/health`
-8. Mostrar las URLs de acceso y el estado de todos los servicios
+#### Estrategia 1 — cloudscraper
 
-> **Es idempotente:** ejecutar `./deploy.sh` varias veces es seguro — actualizará imágenes y reiniciará servicios sin perder datos.
+```python
+import cloudscraper
+scraper = cloudscraper.create_scraper(
+    browser={"browser": "chrome", "platform": "windows", "mobile": False}
+)
+```
+
+**cloudscraper** imita exactamente el handshake TLS de Chrome, incluyendo las extensiones TLS específicas que usa cada versión de Chrome. Esto es técnicamente distinto de un navegador headless — opera a nivel de protocolo de red, no renderiza JavaScript.
+
+- Velocidad: ~1-3 segundos por página
+- Efectivo contra: detección por User-Agent, TLS fingerprinting básico
+- No efectivo contra: Cloudflare Turnstile (requiere JavaScript)
+
+#### Estrategia 2 — Cloudflare Browser Rendering API
+
+Cuando cloudscraper recibe una página de desafío JavaScript, el sistema usa la **Cloudflare Browser Rendering API** (servicio de Chromium real en la nube):
+
+```python
+POST https://api.cloudflare.com/client/v4/accounts/{account_id}/browser-rendering/content
+{
+    "url": "https://www.amazon.com.mx/s?k=fungicida+tomate",
+    "waitFor": ".s-search-results"
+}
+```
+
+Esta API ejecuta un navegador Chromium real en los servidores de Cloudflare, renderiza la página incluyendo JavaScript y devuelve el HTML final. Al ser Cloudflare quien ejecuta el navegador, sus propias reglas WAF no lo bloquean.
+
+- Límite free tier: 10 minutos/día, 1 petición cada 10 segundos
+- Efectivo contra: Cloudflare Turnstile, páginas con JavaScript obligatorio
+
+#### Comportamiento anti-bot adicional
+
+El módulo [scraping/utils/anti_blocking.py](scraping/utils/anti_blocking.py) implementa:
+
+- **Delays humanizados**: espera aleatoria de 3-7 segundos entre peticiones, con un 15% de probabilidad de pausa adicional de 3-8 segundos
+- **Detección de bloqueo**: identifica páginas de captcha, "suspicious traffic", "challenge validation" por contenido del HTML
+- **Backoff exponencial**: si se detecta bloqueo, espera mínimo 5s hasta máximo 60s antes de reintentar
+
+### Limitación conocida: IPs de datacenter
+
+Las IPs de AWS EC2 están en listas de reputación negativa para Akamai WAF (usado por gob.mx, COFEPRIS). Por eso:
+
+- **Amazon.com.mx**: funciona con cloudscraper (no usa Akamai)
+- **COFEPRIS/gob.mx**: bloqueado — requeriría proxy residencial
+- **MercadoLibre**: requiere OAuth API (disponible registrando app en developers.mercadolibre.com)
+
+Para habilitar proxy residencial:
+```bash
+PROXY_URL=http://usuario:contraseña@proxy-host:puerto
+```
 
 ---
 
-## 3. Security Groups requeridos en la EC2
+## 3. Fuentes de datos
 
-Estas reglas de entrada (inbound rules) deben estar habilitadas en el Security Group de la instancia **antes del primer despliegue**:
+### Amazon México — Fuente principal de productos reales
 
-| Puerto | Protocolo | Origen recomendado | Propósito |
+**URL base:** `https://www.amazon.com.mx`  
+**Técnica:** cloudscraper → CF Browser Rendering  
+**Estado:** Activo ✅
+
+Los productos scraped de Amazon son **100% reales**: nombres tal como aparecen en el sitio, precios en MXN actuales, imágenes del CDN de Amazon, y ASIN como identificador único de deduplicación.
+
+#### Queries de búsqueda utilizados
+
+El scraper ejecuta 19 búsquedas especializadas por categoría y cultivo:
+
+| Query | Cultivos objetivo |
+|---|---|
+| `fungicida tomate fresa botrytis tizón` | Tomate, Fresa |
+| `fungicida papa tizón tardío phytophthora` | Papa, Tomate |
+| `fungicida maiz roya tizón foliar` | Maíz |
+| `fungicida frijol antracnosis roya agricola` | Frijol, Maíz |
+| `fungicida mora fresa botrytis monilia` | Mora, Fresa |
+| `fungicida tebuconazol trifloxystrobin agricola` | Tomate, Papa, Fresa, Maíz |
+| `insecticida tomate mosca blanca minador trips` | Tomate, Papa, Fresa |
+| `insecticida maiz gusano cogollero pulgón` | Maíz, Frijol |
+| `insecticida papa frijol pulgón diabrótica` | Papa, Frijol, Maíz |
+| `insecticida abamectina araña roja ácaros` | Tomate, Fresa, Papa, Mora |
+| `insecticida imidacloprid mosca blanca áfidos` | Tomate, Calabaza, Papa |
+| `insecticida espinosad trips mosca blanca cultivos` | Tomate, Fresa, Papa |
+| `herbicida maiz atrazina coquillo pre-emergente` | Maíz |
+| `herbicida clethodim jitomate tomate gramíneas` | Tomate, Frijol, Papa |
+| `herbicida glifosato maleza agricola` | Maíz, Frijol |
+| `fertilizante tomate fresa NPK soluble` | Tomate, Fresa |
+| `fertilizante maiz papa NPK agricola` | Maíz, Papa, Frijol, Calabaza |
+| `humus lombriz abono organico cultivos` | Todos |
+| `fertilizante foliar micronutrientes hortalizas` | Tomate, Papa, Fresa, Calabaza |
+
+#### Productos excluidos automáticamente
+
+El filtro de exclusión descarta ~40% de resultados que Amazon devuelve como "relacionados":
+
+- **Herramientas**: esparcidores, sembradoras, dispensadores de fertilizante
+- **Repelentes de animales vertebrados**: conejos, ciervos, topos, armadillos (no son plagas agrícolas de cultivo)
+- **Trampas físicas/adhesivas**: papeles amarillos, bug zappers (no son agroquímicos)
+- **Plantas ornamentales**: orquídeas, bromelias, cactáceas
+- **Productos domésticos**: para interiores, jardines decorativos, mascotas
+- **Accesorios de equipo**: boquillas, inyectores venturi, mangueras
+- **Productos con precio > $5,000 MXN**: outliers de conversión USD→MXN mal calculada
+
+### Datos de referencia curada (seed)
+
+Además del scraping automático, el catálogo incluye **32 productos de referencia** cargados con `seed_demo.py`. Estos son productos con registro COFEPRIS/SENASICA verificado:
+
+| Grupo | Productos incluidos | Precio típico |
+|---|---|---|
+| Syngenta | Amistar Top, Actara, Karate Zeon, Engeo, Switch, Ridomil Gold | $620–$1,180 MXN |
+| Bayer | Previcur Energy, Confidor, Decis, Infinito, Movento, Teldor | $380–$1,380 MXN |
+| BASF | Cabrio Duo, Headline, Bellis, Luna Sensation, Basagran | $460–$1,560 MXN |
+| Comerciales MX | Consist Max, PRONTIUS, Rotaprid, Abamectina Instar AD | $299–$875 MXN |
+| Herbicidas MX | Hierbamina (2,4-D), Atrazina Sellador, Legacy Mesotriona, Jeren Clethodim | $190–$790 MXN |
+| Fertilizantes | Ultrasol Tomate, Novatec NPK, Humus de Lombriz, Kristalon | $99–$1,450 MXN |
+
+Estos productos son reales — corresponden a marcas y formulaciones comercializadas legalmente en México. Las URLs apuntan a los sitios oficiales de los fabricantes o a Mercado Libre.
+
+---
+
+## 4. Pipeline de datos
+
+```
+Amazon.com.mx
+     │
+     ▼ cloudscraper / CF Browser Rendering
+[HTML crudo]
+     │
+     ▼ amazon_scraper.py — _parse_card()
+[RawProduct]
+  source, name, price_amount, image_url,
+  product_type_raw, target_crops_raw, rating, reviews
+     │
+     ▼ product_parser.py — ProductParser.parse()
+[ParsedProduct]
+  Precio normalizado (PriceParser)
+  Stock normalizado (StockParser)
+  hash_dedup = SHA256(source|name|ingredient|url)
+     │
+     ▼ product_normalizer.py — ProductNormalizer.normalize()
+[NormalizedProduct]
+  Cultivos canonizados (aliases: maiz→maíz, tomato→tomate)
+  Tipo normalizado (fungicide→fungicida)
+  Precio convertido a MXN (CurrencyNormalizer)
+     │
+     ▼ tasks.py — run_scraper()
+[PostgreSQL]
+  products table + price_history table
+     │
+     ▼ Redis cache (TTL 30 min)
+     │
+     ▼ API FastAPI
+  /products, /products/cultivo/{cultivo}, /llm/context
+```
+
+### Deduplicación
+
+Cada producto se identifica por un hash SHA-256 calculado sobre:
+```python
+hash_dedup = SHA256(f"{source}|{name.lower()}|{ingredient.lower()}|{url}")
+```
+
+Si el mismo producto aparece en múltiples scrapes, se **actualiza el precio** y se registra un nuevo entry en `price_history` solo si el precio cambió.
+
+### Normalización de cultivos
+
+El normalizador reconoce aliases en español e inglés:
+
+```python
+"maiz" → "maíz"
+"maize" → "maíz"
+"tomato" → "tomate"
+"jitomate" → "tomate"
+"strawberry" → "fresa"
+"blackberry" → "mora"
+"potato" → "papa"
+```
+
+---
+
+## 5. Stack tecnológico
+
+| Componente | Tecnología | Versión | Rol |
 |---|---|---|---|
-| **22** | TCP | IP fija del equipo de desarrollo (NO `0.0.0.0/0`) | SSH para administración |
-| **8000** | TCP | `0.0.0.0/0` (o IP del backend/LLM/frontend si tienen IP fija) | API FastAPI — consumo por LLM y frontend |
-| **443** | TCP | `0.0.0.0/0` | HTTPS si se coloca Nginx/reverse proxy con certificado SSL |
-| **80** | TCP | `0.0.0.0/0` | Redirección HTTP→HTTPS (si se usa reverse proxy) |
+| API | FastAPI + Uvicorn | 0.111 | REST API, autenticación JWT |
+| Workers | Celery | 5.4 | Ejecución asíncrona de scrapers |
+| Scheduler | Celery Beat | 5.4 | Disparo automático cada 6-12h |
+| Base de datos | PostgreSQL | 16 | Almacenamiento de productos |
+| Cache | Redis | 7 | Cache de respuestas (TTL 30 min) |
+| Scraping HTTP | cloudscraper | 1.2.71 | Bypass TLS fingerprinting |
+| Scraping headless | CF Browser Rendering API | — | Páginas con Cloudflare/JS |
+| HTTP client | httpx | — | Fallback scraping |
+| HTML parsing | BeautifulSoup4 + lxml | — | Extracción de datos del DOM |
+| Migraciones DB | Alembic | — | Schema versioning |
+| Contenedores | Docker + Docker Compose | — | Despliegue y orquestación |
+| Infraestructura | AWS EC2 | t3.medium | Servidor en producción |
 
-**Puertos que NO deben quedar expuestos públicamente:**
-- `5432` (PostgreSQL) — solo tráfico interno entre contenedores
-- `6379` (Redis) — solo tráfico interno entre contenedores
-- `8001` (Playwright service) — solo tráfico interno entre contenedores
+### Diagrama de contenedores
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Docker Compose                        │
+│                                                         │
+│  ┌──────────┐   ┌──────────┐   ┌─────────────────────┐ │
+│  │   api    │   │  worker  │   │     scheduler       │ │
+│  │ :80→8000 │   │ (Celery) │   │   (Celery Beat)     │ │
+│  └────┬─────┘   └────┬─────┘   └──────────┬──────────┘ │
+│       │              │                     │            │
+│       └──────┬───────┘─────────────────────┘            │
+│              │                                          │
+│    ┌─────────▼─────────┐   ┌──────────────────────┐    │
+│    │     PostgreSQL    │   │       Redis           │    │
+│    │   (port 5432)     │   │    (port 6379)        │    │
+│    │   products        │   │    cache + broker     │    │
+│    │   price_history   │   └──────────────────────┘    │
+│    └───────────────────┘                                │
+└─────────────────────────────────────────────────────────┘
+         │
+         ▼ Puerto 80 expuesto públicamente
+    http://44.196.107.153/
+```
 
 ---
 
-## 4. Autenticación
+## 6. Despliegue en EC2
+
+### Requisitos
+
+- EC2 Ubuntu 22.04/24.04, t3.small o superior
+- Puerto 80 abierto al público (Security Group)
+- Archivo `.env` configurado
+- Git acceso al repositorio
+
+### Primer despliegue
+
+```bash
+ssh -i tu-key.pem ubuntu@44.196.107.153
+
+git clone https://github.com/wilber023/screaping_service ~/screaping_service
+cd ~/screaping_service
+
+cp .env.example .env
+nano .env   # completar variables
+
+docker-compose build
+docker-compose run --rm api alembic upgrade head
+docker-compose up -d
+docker-compose exec api python seed_demo.py
+```
+
+### Actualizar después de cambios en código
+
+```bash
+cd ~/screaping_service
+git pull
+docker-compose build api worker
+docker-compose up -d
+# Si hay nuevas migraciones:
+docker-compose run --rm api alembic upgrade head
+```
+
+### Ejecutar scraper manualmente
+
+```bash
+# Amazon México
+docker-compose exec worker python -c "
+import logging; logging.basicConfig(level=logging.INFO)
+from scraping.workers.tasks import run_scraper
+print(run_scraper.apply(args=['amazon']).result)
+"
+
+# Todos los scrapers activos en paralelo
+docker-compose exec worker python -c "
+from scraping.workers.tasks import run_all_scrapers
+print(run_all_scrapers.apply().result)
+"
+```
+
+### Verificar estado
+
+```bash
+# Health check
+curl http://localhost/health
+
+# Ver logs en tiempo real
+docker-compose logs -f worker
+
+# Contar productos por fuente
+docker-compose exec postgres psql -U agrograph -d agrograph -c "
+SELECT source, COUNT(*) as total, 
+       AVG(price_amount)::numeric(10,0) as precio_promedio_MXN
+FROM products 
+WHERE is_active = true
+GROUP BY source ORDER BY total DESC;"
+```
+
+---
+
+## 7. Autenticación
 
 Todos los endpoints (excepto `/health`) requieren **dos headers simultáneos**:
 
@@ -112,447 +384,328 @@ X-API-Key: <api-key>
 Authorization: Bearer <jwt-token>
 ```
 
-### 4.1 API Key
-
-Identifica al sistema cliente (frontend, LLM, jobs internos). Se configura en `.env`:
-
-```
-API_KEY_FRONTEND=<hex-64-chars>
-API_KEY_LLM=<hex-64-chars>
-```
-
-Genera claves con:
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-### 4.2 JWT Token
-
-El JWT identifica al usuario final y su tipo. Debe incluir:
-
-```json
-{
-  "user_id": "uuid-del-usuario",
-  "user_type": "aprendiz | agricultor_experimentado | admin",
-  "exp": 1750000000
-}
-```
-
-**Tipos de usuario y permisos:**
-
-| `user_type` | Acceso |
-|---|---|
-| `aprendiz` | Lectura del catálogo (nombre, tipo, cultivos, enfermedades). **Sin precios ni stock detallado.** |
-| `agricultor_experimentado` | Acceso completo: precios, stock, históricos, filtros avanzados. |
-| `admin` | Todo lo anterior + endpoints `/admin/*` para disparar scrapers y ver status. |
-
-### 4.3 Errores de autenticación
-
-| Código | Error | Causa |
-|---|---|---|
-| `401` | `invalid_api_key` | `X-API-Key` ausente o inválida |
-| `401` | `invalid_token` | JWT ausente, expirado o malformado |
-| `403` | `insufficient_permissions` | JWT válido pero `user_type` no autorizado |
-
-### 4.4 Ejemplo con curl
+### Obtener token JWT
 
 ```bash
-curl -X GET "http://<ec2-ip>:8000/products?crop=tomate&page=1&per_page=10" \
-  -H "X-API-Key: tu_api_key_aqui" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+TOKEN=$(curl -s -X POST "http://44.196.107.153/auth/token?user_type=agricultor_experimentado" \
+  -H "X-API-Key: TU_API_KEY" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 ```
+
+### Tipos de usuario
+
+| `user_type` | Precios | Price history | Admin |
+|---|---|---|---|
+| `aprendiz` | Ocultos | No | No |
+| `agricultor_experimentado` | Visibles en MXN | Sí | No |
+| `admin` | Visibles | Sí | Sí |
 
 ---
 
-## 5. Catálogo de endpoints
+## 8. Endpoints de la API
 
-### Base URL: `http://<ec2-ip>:8000`
-### Documentación interactiva: `http://<ec2-ip>:8000/docs`
+**Base URL:** `http://44.196.107.153`  
+**Docs interactivas:** `http://44.196.107.153/docs`
 
----
+### Health
 
-### `GET /health`
-> No requiere autenticación. Para healthchecks de infraestructura.
-
-**Respuesta:**
+```
+GET /health
+```
+No requiere autenticación.
 ```json
 { "status": "ok", "service": "agrograph-scraping-api" }
 ```
 
----
+### Listar productos
 
-### `GET /products`
-Lista productos con filtros opcionales.
+```
+GET /products
+```
 
-**Query params:**
-
-| Param | Tipo | Descripción |
+| Param | Tipo | Ejemplo |
 |---|---|---|
-| `crop` | string | Filtrar por cultivo (e.g. `tomate`, `papa`) |
-| `disease` | string | Filtrar por enfermedad (match parcial) |
+| `crop` | string | `tomate` |
+| `disease` | string | `botrytis` |
 | `product_type` | string | `fungicida` \| `insecticida` \| `herbicida` \| `fertilizante` |
-| `manufacturer` | string | Filtrar por fabricante (match parcial) |
-| `source` | string | `agrofy` \| `mercadolibre` \| `syngenta` \| `bayer` \| `basf` |
-| `page` | int | Página (default: 1) |
-| `per_page` | int | Items por página (default: 20, max: 100) |
+| `source` | string | `amazon` \| `syngenta` \| `bayer` \| `basf` \| `mercadolibre` |
+| `active_ingredient` | string | `imidacloprid` |
+| `page` | int | `1` |
+| `per_page` | int | `20` (max 100) |
 
-**Respuesta:**
-```json
-{
-  "total": 142,
-  "page": 1,
-  "per_page": 20,
-  "items": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "source": "syngenta",
-      "source_url": "https://www.syngenta.com.mx/productos/amistar-top",
-      "name": "Amistar Top",
-      "manufacturer": "Syngenta",
-      "active_ingredient": "Azoxistrobina + Difenoconazol",
-      "product_type": "fungicida",
-      "target_crops": ["tomate", "papa", "uva"],
-      "target_diseases": ["tizón tardío", "alternaria", "botrytis"],
-      "price": {
-        "amount": 450.00,
-        "currency": "MXN",
-        "original_currency": "MXN",
-        "last_updated": "2025-06-15T10:00:00Z"
-      },
-      "stock": {
-        "status": "in_stock",
-        "quantity": null
-      },
-      "availability_regions": ["MX"],
-      "scraped_at": "2025-06-15T10:00:00Z"
-    }
-  ]
-}
+### Productos por cultivo (shortcut)
+
+```
+GET /products/cultivo/{cultivo}
+```
+Equivale a `/products?crop={cultivo}`.
+
+**Ejemplo:** `GET /products/cultivo/papa` → todos los fungicidas, insecticidas y herbicidas para papa.
+
+### Productos por enfermedad (shortcut)
+
+```
+GET /products/enfermedad/{enfermedad}
+```
+**Ejemplo:** `GET /products/enfermedad/botrytis`
+
+### Detalle de producto
+
+```
+GET /products/{id}
 ```
 
-> **Nota para `aprendiz`:** los campos `price.amount` y `stock.quantity` se omiten.
+### Historial de precios
 
----
+```
+GET /products/{id}/price-history
+```
+Requiere `agricultor_experimentado` o `admin`.
 
-### `GET /products/{id}`
-Detalle de un producto.
-
-**Respuesta:** mismo schema que un item de `/products`.
-
----
-
-### `GET /products/{id}/price-history`
-> Requiere `agricultor_experimentado` o `admin`.
-
-**Respuesta:**
 ```json
 {
-  "product_id": "550e8400-...",
-  "product_name": "Amistar Top",
+  "product_id": "...",
+  "product_name": "Fungicida Tebuconazol",
   "history": [
-    { "amount": 420.00, "currency": "MXN", "original_currency": "MXN", "recorded_at": "2025-05-01T08:00:00Z" },
-    { "amount": 450.00, "currency": "MXN", "original_currency": "MXN", "recorded_at": "2025-06-15T10:00:00Z" }
+    { "amount": 765.0, "currency": "MXN", "recorded_at": "2026-06-20T10:00:00" },
+    { "amount": 775.0, "currency": "MXN", "recorded_at": "2026-06-26T04:00:00" }
   ]
 }
 ```
 
----
+### Contexto para LLM
 
-### `GET /crops`
-Lista los 14 cultivos soportados.
+```
+GET /llm/context?crop=tomate&limit=100
+```
 
+Devuelve resumen compacto optimizado para inyección en system prompt del modelo de IA.
+
+### Admin — Disparar scraper
+
+```
+POST /admin/trigger-scrape?source=amazon
+```
+Requiere `admin`.
+
+### Lista de cultivos
+
+```
+GET /crops
+```
 ```json
-{ "crops": ["calabaza", "frijol", "manzana", "mora", "cereza", "maíz", ...] }
+{ "crops": ["calabaza", "frijol", "mora", "maíz", "papa", "fresa", "tomate"] }
 ```
 
 ---
 
-### `GET /crops/{crop}/treatments`
-Productos disponibles para tratar enfermedades de un cultivo.
-
-**Params:** `page`, `per_page`
-
-**Respuesta:** igual que `/products`.
-
----
-
-### `GET /diseases/{disease}/products`
-Productos que tratan una enfermedad específica (búsqueda parcial).
-
-**Ejemplo:** `/diseases/tizón/products`
-
-**Respuesta:** igual que `/products`.
-
----
-
-### `GET /llm/context`
-Resumen compacto del catálogo optimizado para inyección como contexto del LLM.
-
-**Query params:**
-- `crop` (optional): limitar a un cultivo
-- `limit` (default: 200, max: 500): número máximo de productos
-
-**Respuesta:**
-```json
-{
-  "total_products": 87,
-  "by_crop": {
-    "tomate": ["Amistar Top", "Previcur Energy", "Movento"],
-    "papa": ["Infinito", "Acrobat MZ"]
-  },
-  "by_type": {
-    "fungicida": 45,
-    "insecticida": 28,
-    "herbicida": 10,
-    "fertilizante": 4
-  },
-  "products": [
-    {
-      "id": "550e8400-...",
-      "name": "Amistar Top",
-      "type": "fungicida",
-      "active_ingredient": "Azoxistrobina + Difenoconazol",
-      "manufacturer": "Syngenta",
-      "crops": ["tomate", "papa", "uva"],
-      "diseases": ["tizón tardío", "alternaria"],
-      "price_usd": 25.71,
-      "stock": "in_stock"
-    }
-  ],
-  "generated_at": "2025-06-15T12:00:00Z"
-}
-```
-
----
-
-### `POST /admin/trigger-scrape`
-> Requiere `admin`.
-
-**Query param:** `source` — nombre del scraper (`agrofy`, `mercadolibre`, `syngenta`, `bayer`, `basf`, `all`)
-
-**Respuesta:**
-```json
-{
-  "status": "queued",
-  "source": "syngenta",
-  "task_id": "abc123-...",
-  "queued_at": "2025-06-15T12:00:00Z"
-}
-```
-
----
-
-### `GET /admin/scrape-status`
-> Requiere `admin`.
-
-**Query param (opcional):** `task_id` — consulta el estado de una tarea específica.
-
-**Sin `task_id`:** devuelve el estado de todos los workers activos.
-
----
-
-## 6. Guía de integración para el LLM
+## 9. Integración con el LLM
 
 ### Flujo recomendado
 
-```
-1. Al iniciar una sesión de diagnóstico:
-   GET /llm/context?crop={cultivo_detectado}&limit=100
-   → Inyectar la respuesta como contexto del system prompt
-
-2. Cuando el usuario pide tratamientos específicos:
-   GET /crops/{crop}/treatments
-   → Complementar la respuesta del LLM con datos actualizados
-
-3. Para una enfermedad específica:
-   GET /diseases/{disease}/products
-   → Enriquecer la recomendación con productos disponibles
-
-4. Para detalle de precio/disponibilidad:
-   GET /products/{id}
-```
-
-### Headers para el LLM
-
 ```python
-headers = {
-    "X-API-Key": os.environ["API_KEY_LLM"],
+import requests, os
+
+SCRAPING_API = "http://44.196.107.153"
+HEADERS = {
+    "X-API-Key": os.environ["SCRAPING_API_KEY"],
     "Authorization": f"Bearer {llm_service_jwt}",
 }
+
+def get_context_for_crop(crop: str) -> dict:
+    """Obtiene catálogo de productos para el modelo de IA."""
+    return requests.get(
+        f"{SCRAPING_API}/llm/context",
+        params={"crop": crop, "limit": 50},
+        headers=HEADERS,
+        timeout=10,
+    ).json()
+
+def get_products_for_disease(disease: str) -> list:
+    """Todos los productos que tratan una enfermedad."""
+    r = requests.get(
+        f"{SCRAPING_API}/products/enfermedad/{disease}",
+        headers=HEADERS,
+        timeout=10,
+    ).json()
+    return r["items"]
 ```
 
-El JWT del servicio LLM debe tener `user_type: "agricultor_experimentado"` para acceder a precios completos.
-
-### Manejo de errores
-
-| HTTP | Acción recomendada |
-|---|---|
-| `401` | Renovar el JWT o verificar la API Key |
-| `403` | Verificar que el `user_type` del JWT sea el correcto |
-| `429` | Esperar y reintentar con backoff exponencial |
-| `5xx` | Reintentar hasta 3 veces; si persiste, usar catálogo local en cache |
-
-### Formato de contexto para el prompt
+### Prompt de sistema con catálogo
 
 ```python
-context_response = requests.get(
-    f"{API_BASE}/llm/context",
-    params={"crop": detected_crop, "limit": 100},
-    headers=headers,
-    timeout=10,
-).json()
+ctx = get_context_for_crop("tomate")
 
-system_context = f"""
-Catálogo de productos fitosanitarios disponibles para {detected_crop}:
-Total: {context_response['total_products']} productos
-Tipos disponibles: {context_response['by_type']}
+system_prompt = f"""
+Eres un asesor agronómico para cultivos de {cultivo} en México.
 
-Productos recomendados:
-{json.dumps(context_response['products'][:20], ensure_ascii=False, indent=2)}
+Catálogo de productos disponibles ({ctx['total']} productos):
+{json.dumps(ctx['items'], ensure_ascii=False, indent=2)}
+
+Instrucciones:
+- Recomienda tratamientos basándote en costo-beneficio
+- Si hay 3+ productos para la misma plaga, compara precios y sugiere la opción más económica
+- Considera que el agricultor puede combinar productos para reducir costo total
+- Menciona siempre el precio en MXN y el ingrediente activo
 """
 ```
 
 ---
 
-## 7. Guía de integración para el Frontend
+## 10. Variables de entorno
 
-### Flujo de autenticación
-
-El frontend debe:
-1. Obtener la API Key del backend de AgroGraph (nunca exponerla directamente en el cliente)
-2. Enviar ambos headers en cada request a esta API
-3. Mapear el `user_type` del usuario logueado al JWT que envía a esta API
-
-```typescript
-// Ejemplo TypeScript / React
-const apiClient = axios.create({
-  baseURL: process.env.REACT_APP_SCRAPING_API_URL,
-  headers: {
-    "X-API-Key": process.env.REACT_APP_SCRAPING_API_KEY,
-    "Authorization": `Bearer ${userJwt}`,   // JWT con user_type del usuario
-  },
-});
-
-// Listar productos para tomate
-const { data } = await apiClient.get("/products", {
-  params: { crop: "tomate", product_type: "fungicida", page: 1, per_page: 20 },
-});
-```
-
-### Mapeo de roles
-
-| Rol en la app AgroGraph | `user_type` en el JWT de esta API |
-|---|---|
-| Usuario nuevo / en aprendizaje | `aprendiz` |
-| Usuario con experiencia / premium | `agricultor_experimentado` |
-| Administrador de la plataforma | `admin` |
-
-### Diferencias de respuesta por tipo de usuario
-
-- **`aprendiz`:** campos `price.amount` y `stock.quantity` vienen `null`. Solo ve nombre, tipo, cultivos y enfermedades.
-- **`agricultor_experimentado`:** respuesta completa con precios en MXN (normalizados) y stock.
-- **Ambos:** el endpoint `/products/{id}/price-history` solo es accesible para `agricultor_experimentado` y `admin`.
-
----
-
-## 8. Variables de entorno
-
-Copiar `.env.example` como `.env` y completar todos los valores:
+Archivo `.env` en la raíz del proyecto:
 
 | Variable | Requerida | Descripción |
 |---|---|---|
-| `DATABASE_URL` | ✅ | URL de conexión a Postgres. Formato: `postgresql://user:password@postgres:5432/agrograph` |
-| `REDIS_URL` | ✅ | URL de Redis. Formato: `redis://redis:6379/0` |
-| `S3_BUCKET` | ✅ | Nombre del bucket S3 para snapshots HTML |
-| `S3_ACCESS_KEY` | ✅ | AWS Access Key ID (o MinIO) |
-| `S3_SECRET_KEY` | ✅ | AWS Secret Access Key (o MinIO) |
-| `S3_REGION` | — | Región AWS (default: `us-east-1`) |
-| `S3_ENDPOINT_URL` | — | Solo si usas MinIO u otro compatible con S3 |
-| `PROXY_LIST` | — | Lista de proxies separados por coma: `http://user:pass@host:port,...` |
-| `SCRAPE_INTERVAL_HOURS` | — | Intervalo entre ciclos de scraping por fuente (default: `6`) |
-| `API_KEY_FRONTEND` | ✅ | API Key para el frontend (hex 64 chars mínimo) |
-| `API_KEY_LLM` | ✅ | API Key para el servicio LLM (hex 64 chars mínimo) |
-| `JWT_SECRET` | ✅ | Secreto para firmar JWTs (mínimo 32 chars aleatorios) |
-| `JWT_ALGORITHM` | — | Algoritmo JWT (default: `HS256`) |
-| `JWT_EXPIRATION_MINUTES` | — | Expiración del token en minutos (default: `1440` = 24h) |
-| `DEBUG` | — | `true` / `false` — activa logs debug (default: `false`) |
+| `DATABASE_URL` | ✅ | `postgresql://agrograph:password@postgres:5432/agrograph` |
+| `REDIS_URL` | ✅ | `redis://redis:6379/0` |
+| `API_KEY_FRONTEND` | ✅ | Hex 64 chars. Genera: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `API_KEY_LLM` | ✅ | Hex 64 chars distinto al anterior |
+| `JWT_SECRET` | ✅ | Mínimo 32 chars aleatorios |
+| `CF_ACCOUNT_ID` | ✅ | ID de cuenta Cloudflare (para Browser Rendering) |
+| `CF_API_TOKEN` | ✅ | Token de API Cloudflare con permisos Browser Rendering |
+| `ML_CLIENT_ID` | — | App ID de MercadoLibre (para activar scraper ML) |
+| `ML_CLIENT_SECRET` | — | Secret Key de MercadoLibre |
+| `PROXY_URL` | — | `http://user:pass@host:port` (proxy residencial opcional) |
+| `POSTGRES_USER` | ✅ | Usuario de PostgreSQL |
+| `POSTGRES_PASSWORD` | ✅ | Contraseña de PostgreSQL |
+| `POSTGRES_DB` | ✅ | Nombre de la base de datos |
+| `S3_BUCKET` | — | Bucket S3 para snapshots HTML (opcional) |
+| `DEBUG` | — | `true` para logs detallados |
 
 ---
 
-## 9. Troubleshooting del deploy
+## 11. Troubleshooting
 
-### El contenedor `api` no arranca
-
-```bash
-docker compose logs api
-```
-Causas comunes:
-- Variables de `.env` con placeholder sin reemplazar
-- `DATABASE_URL` con password incorrecto
-- Puerto 8000 ya ocupado en la EC2
-
-### Las migraciones fallan
+### Verificar que el scraper encuentra productos
 
 ```bash
-docker compose run --rm api alembic upgrade head
-```
-Verifica que `postgres` esté corriendo y sano:
-```bash
-docker compose exec postgres pg_isready -U agrograph -d agrograph
+docker-compose exec worker python -c "
+import logging; logging.basicConfig(level=logging.DEBUG)
+from scraping.scrapers.amazon_scraper import AmazonScraper
+s = AmazonScraper()
+products = s.scrape()
+print(f'Encontrados: {len(products)}')
+for p in products[:3]:
+    print(f'  - {p.name[:60]} | ${p.price_amount} | cultivos={p.target_crops_raw}')
+"
 ```
 
-### El worker no procesa tareas
-
-```bash
-docker compose logs worker
-docker compose exec worker celery -A scraping.workers.celery_worker inspect active
-```
-Causa probable: `REDIS_URL` incorrecto o Redis no responde.
-
-### Error "Port 8000 already in use"
+### Verificar productos en BD por cultivo
 
 ```bash
-sudo lsof -i :8000
-sudo kill -9 <PID>
-./deploy.sh
+docker-compose exec postgres psql -U agrograph -d agrograph -c "
+SELECT name, price_amount, array_to_string(target_crops, ',') as cultivos
+FROM products 
+WHERE 'papa' = ANY(target_crops) AND is_active = true
+ORDER BY price_amount
+LIMIT 10;"
 ```
 
-### S3 bucket no existe / permiso denegado
+### Scraper devuelve 0 productos
 
-Si `S3_ENDPOINT_URL` está vacío, el sistema intenta usar AWS S3 real. Las credenciales deben tener permisos `s3:PutObject` y `s3:CreateBucket` sobre el bucket configurado.
-
-Para ignorar S3 en pruebas, los snapshots simplemente no se guardan (logging warning, no error fatal).
-
-### `deploy.sh` falla en el paso de Docker Compose
-
-```
-Error: Cannot connect to the Docker daemon
-```
-Solución:
+**Causa 1 — Bloqueo temporal de Amazon:**
 ```bash
-sudo systemctl start docker
-sudo usermod -aG docker $USER
-newgrp docker
-./deploy.sh
+# Esperar 30 min y reintentar. Amazon bloquea después de muchas peticiones rápidas.
 ```
 
-### Ver todos los logs en tiempo real
-
+**Causa 2 — CF Browser Rendering sin cuota:**
 ```bash
-docker compose logs -f
-# O por servicio específico:
-docker compose logs -f api worker scheduler
+# El plan gratuito tiene 10 min/día. Verificar en dashboard.cloudflare.com
+docker-compose logs worker | grep "CF Browser"
 ```
 
-### Re-deploy completo (sin perder datos)
-
+**Causa 3 — Cambio de estructura HTML de Amazon:**
 ```bash
-./deploy.sh   # idempotente — actualiza imágenes y reinicia servicios
+# Los selectores CSS pueden cambiar. Verificar el HTML:
+docker-compose exec worker python -c "
+from scraping.scrapers.base_scraper import BaseScraper
+class Test(BaseScraper):
+    source = 'test'
+    def scrape(self): return []
+t = Test()
+html = t._fetch_html('https://www.amazon.com.mx/s?k=fungicida+agricola')
+print(html[:2000])
+"
 ```
 
-### Reset completo (destruye datos)
+### API no responde en puerto 80
 
 ```bash
-docker compose down -v   # ⚠️ elimina volúmenes (DB, Redis)
-./deploy.sh
+# Verificar que el contenedor API está corriendo
+docker-compose ps api
+
+# Ver logs del API
+docker-compose logs api --tail=50
+
+# El API está en puerto 80, NO 8000
+curl http://localhost/health   # correcto
+curl http://localhost:8000/health   # incorrecto (no expuesto al host)
+```
+
+### Base de datos: ver estado actual
+
+```bash
+docker-compose exec postgres psql -U agrograph -d agrograph -c "
+SELECT source, product_type, COUNT(*) as total,
+       MIN(price_amount) as precio_min,
+       MAX(price_amount) as precio_max
+FROM products WHERE is_active = true
+GROUP BY source, product_type
+ORDER BY source, product_type;"
+```
+
+### Reset de productos Amazon (re-scrape limpio)
+
+```bash
+docker-compose exec postgres psql -U agrograph -d agrograph -c "
+DELETE FROM price_history ph USING products p 
+WHERE ph.product_id = p.id AND p.source = 'amazon';
+DELETE FROM products WHERE source = 'amazon';"
+
+docker-compose exec worker python -c "
+from scraping.workers.tasks import run_scraper
+print(run_scraper.apply(args=['amazon']).result)"
+```
+
+---
+
+## Estructura del proyecto
+
+```
+screaping/
+├── scraping/
+│   ├── api/
+│   │   ├── main.py                  # FastAPI app, CORS, routers
+│   │   └── routes/
+│   │       ├── products.py          # /products, /cultivo/, /enfermedad/
+│   │       ├── auth.py              # /auth/token
+│   │       ├── crops.py             # /crops
+│   │       └── llm.py               # /llm/context
+│   ├── scrapers/
+│   │   ├── base_scraper.py          # Clase base: cascada cloudscraper→CF→httpx
+│   │   ├── amazon_scraper.py        # Scraper Amazon.com.mx (activo)
+│   │   ├── mercadolibre_scraper.py  # Scraper ML (requiere OAuth)
+│   │   ├── agrofy_scraper.py        # Scraper Agrofy.com.ar
+│   │   ├── bayer_scraper.py         # Catálogo Bayer (bloqueado desde EC2)
+│   │   ├── syngenta_scraper.py      # Catálogo Syngenta (bloqueado desde EC2)
+│   │   └── basf_scraper.py          # Catálogo BASF (bloqueado desde EC2)
+│   ├── parsers/
+│   │   └── product_parser.py        # RawProduct → ParsedProduct
+│   ├── normalizers/
+│   │   └── product_normalizer.py    # ParsedProduct → NormalizedProduct
+│   ├── models/
+│   │   ├── product.py               # SQLAlchemy ORM Product
+│   │   └── price_history.py         # PriceHistory (historial de precios)
+│   ├── workers/
+│   │   ├── celery_worker.py         # Configuración Celery
+│   │   └── tasks.py                 # run_scraper(), run_all_scrapers()
+│   └── utils/
+│       ├── anti_blocking.py         # Delays, detección de bloqueos, backoff
+│       └── cf_browser.py            # Cliente CF Browser Rendering API
+├── migrations/                      # Alembic migrations
+├── seed_demo.py                     # 32 productos de referencia con datos reales
+├── docker-compose.yml
+├── Dockerfile
+└── requirements.txt
 ```

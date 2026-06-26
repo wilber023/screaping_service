@@ -65,7 +65,7 @@ _TYPE_MAP = {
 
 # Palabras que indican que el producto NO es un agroquímico aplicable al cultivo
 _EXCLUDE_PHRASES = [
-    # Herramientas y equipo de aplicación/distribución
+    # ── Herramientas / equipo de aplicación ──────────────────────────────────
     "esparcidor de fertilizante", "esparcidor de abono", "esparcidora de fertilizante",
     "distribuidor de fertilizante", "distribuidor manual de fertilizante",
     "herramienta de fertiliz", "herramienta esparcidora",
@@ -73,58 +73,79 @@ _EXCLUDE_PHRASES = [
     "aplicador de fertilizante", "aplicador de estiércol",
     "mochila topdressing", "mochila de fertilizantes",
     "bolsa dispensadora", "bolsa de estiércol",
-    "sembradora", "sembradora doble", "sembradora de",
-    "herramienta de siembra", "herramienta agrícola portátil",
-    # Boquillas y accesorios de equipo de aspersión
+    "sembradora", "herramienta de siembra", "herramienta agrícola portátil",
+    "espolvoreador de polvos", "espolvoreador de tierra",
+    # Boquillas y accesorios de aspersión
     "boquilla", "nozzle", "inyector venturi", "accesorios para drone",
     "accesorios pulverizador", "fumigador con varilla",
     "refaccion", "pieza de repuesto", "cabezal agrícola",
-    # Contenedores y bolsas para cultivo
+    "pulverizador de presión", "rociador de presión",
+    # ── Sustratos, contenedores y medios de siembra (no agroquímicos) ────────
     "bolsa de cultivo", "bolsa tejida tipo mochila", "bolsa geográfica",
     "contenedor de cultivo", "maceta de tela", "paca de paja",
+    "pellets de coco", "piso de coco", "fibra de coco",
+    "sustrato de germinación", "sustrato orgánico para árboles",
+    "sustrato para semillas",
+    "perlita mineral", "vermiculita",
+    "film mulch", "mulch aumenta", "película gruesa", "red mulch",
     "para terraza y flores",
-    # Sistemas hidropónicos / aeropónicos
+    # ── Hidropónico / aeropónico ─────────────────────────────────────────────
     "hidropónico", "hidroponica", "hidroponico", "aeropónico",
-    # Repelentes de animales vertebrados (no plagas agrícolas de cultivo)
-    "repelente de conejos", "repelente de ciervos", "repelente de topos",
-    "repelente de armadillo", "repelente de gopher", "repelente de venado",
-    "disuasión de tobos",
-    # Repelentes y trampas eléctricas/físicas
-    "bug zapper", "fly killer", "raqueta exterminador", "raqueta eléctric",
-    "bocinas repelentes", "eliminador de insectos fly",
-    # Plantas ornamentales
-    "orquídea", "orquidea", "bromelia", "anturio", "keikis",
-    "cactácea", "cactacea", "suculenta", "suculentas",
-    # Uso doméstico / jardinería decorativa
-    "plantas de interior", "uso en casa", "jardinería básica",
-    "macetas y áreas verdes", "para el hogar y jardín decorativo",
-    "cuidado de plantas y hogar",
-    # Trampas y señuelos
-    "señuelo de feromona", "señuelo feromona", "trampa para insectos",
-    # Mascotas
-    "seguro para mascotas", "para mascotas", "uso en mascotas",
-    # Mosquitos domésticos
-    "mosquitero", "patio al aire", "cocina jardín terraza",
-    # Semillas (no agroquímicos)
-    "semilla de", "paquete de semillas",
-    # Trampas físicas / adhesivas (no son insecticidas químicos)
-    "trampa adhesiva", "trampa amarilla", "trampa para moscas",
-    "trampa para insectos", "trampa para insectos voladores",
-    "atrapamoscas", "trampa de doble cara",
-    "trampas para moscas de la fruta", "trampa para ventana",
-    "cebo especial y embudo",
-    # Equipo de aspersión (segunda línea)
-    "pulverizador de presión", "rociador de presión de jardín",
-    # Herbicidas para caminos/patios (no cultivos agrícolas)
+    # ── Productos de plomería / limpieza de drenaje (falsos positivos críticos)
+    "coladera", "drenaje de baño", "tubería", "lavabo", "fregadero",
+    "regadera", "mal olor en", "olores en tuberías", "obstrucción",
+    "odour stop", "tratamiento contra malos olores",
+    # ── Uso doméstico / jardinería de balcón ─────────────────────────────────
+    "plantas de interior", "plantas en el hogar", "planta de balcón",
+    "refuerzo de plantas de balcón", "soporte para de plantas en el hogar",
+    "purificador de aire", "hogar con macetas", "palma de areca",
+    "jardinería básica", "macetas y áreas verdes",
+    "para el hogar y jardín decorativo", "cuidado de plantas y hogar",
+    "uso en casa", "cocina jardín terraza",
+    "palitos de fertilizante para plantas", "palitos de comida vegetal",
+    "barras de fertilizante para plantas",
+    "paquete de 40", "paquete de 20",  # palitos/barras fertilizante doméstico
+    # ── Enraizantes / estimulantes ornamentales ──────────────────────────────
+    "enraizante para plantas", "promueve raíces sanas en esquejes",
+    "leaf shine", "plant shine",
+    # ── Activadores de suelo para césped / jardín (no cultivo agrícola) ──────
+    "para jardín, césped", "para jardín y cesped", "para cesped y jardin",
+    "activador de suelo", "activadores de suelo",
+    "para pasto y jardín", "para pasto y jardín",
+    # ── Herbicidas para caminos/césped (no cultivos agrícolas) ───────────────
     "para caminos", "para patios y", "para terrazas o accesos",
     "eliminación de malezas en caminos",
+    "para césped de temporada", "control de malezas de hoja ancha",
     "base de aceto", "sustancia básica acetum",
-    # Selladores de poda
+    # ── Repelentes de animales vertebrados ───────────────────────────────────
+    "repelente de conejos", "repelente de ciervos", "repelente de topos",
+    "repelente de armadillo", "repelente de gopher", "repelente de venado",
+    # ── Trampas físicas / adhesivas ──────────────────────────────────────────
+    "trampa adhesiva", "trampa amarilla", "sticky", "fly trap",
+    "trampa para moscas", "trampa para insectos voladores",
+    "atrapamoscas", "trampa de doble cara", "trampa sin olor",
+    "trampas para moscas de la fruta", "trampa para ventana",
+    "cebo especial y embudo",
+    "yellow sticky", "trampas adhesivas amarillas",
+    # ── Repelentes eléctricos ─────────────────────────────────────────────────
+    "bug zapper", "fly killer", "raqueta exterminador", "raqueta eléctric",
+    "bocinas repelentes",
+    # ── Plantas ornamentales ─────────────────────────────────────────────────
+    "orquídea", "orquidea", "bromelia", "anturio", "keikis",
+    "cactácea", "cactacea", "suculenta", "suculentas",
+    # ── Mascotas ─────────────────────────────────────────────────────────────
+    "seguro para mascotas", "para mascotas", "uso en mascotas",
+    # ── Semillas ─────────────────────────────────────────────────────────────
+    "semilla de", "paquete de semillas",
+    # ── Selladores de poda ───────────────────────────────────────────────────
     "pruning seal", "sellador de poda",
-    # Productos capilares o cosméticos (falsos positivos)
+    # ── Cosméticos capilares ─────────────────────────────────────────────────
     "cabello", "queratina", "acondicionador profundo", "bond repair",
-    # Productos sin utilidad en cultivo
-    "colector protector",
+    # ── Señuelos de feromonas ────────────────────────────────────────────────
+    "señuelo de feromona", "señuelo feromona",
+    # ── Otros sin utilidad agrícola ──────────────────────────────────────────
+    "colector protector", "mosquitero",
+    "kit nutriente + enraizante",  # kits ornamentales
 ]
 
 # Precio máximo razonable por unidad en MXN
@@ -308,13 +329,24 @@ class AmazonScraper(BaseScraper):
         name_lower = name.lower()
         if any(phrase in name_lower for phrase in _EXCLUDE_PHRASES):
             return True
-        # Herramientas que no son agroquímicos
+        # Herramientas / equipo que no son agroquímicos
         tool_words = [
-            "esparcidor", "sembradora", "dispensador", "distribuidor de abono",
-            "aplicador de", "mochila toping", "kit de preparación",
-            "pulverizador de presión", "rociador de presión",
+            "esparcidor", "espolvoreador", "sembradora", "dispensador",
+            "distribuidor de abono", "aplicador de", "mochila toping",
+            "kit de preparación", "pulverizador de presión", "rociador de presión",
         ]
         if any(w in name_lower for w in tool_words):
+            return True
+        # Producto de plomería/hogar (BIOPURE Odour Stop y similares)
+        plumbing = ["coladera", "tubería", "drenaje", "lavabo", "fregadero", "obstrucción"]
+        if any(w in name_lower for w in plumbing):
+            return True
+        # Producto claramente decorativo/hogar con macetas
+        home_signals = [
+            "para el hogar", "para tu hogar", "aire de interior",
+            "plantas de la casa", "balcón y terraza",
+        ]
+        if any(w in name_lower for w in home_signals):
             return True
         # El producto se auto-declara no agrícola
         if "no agrícola" in name_lower or "no agricola" in name_lower:
