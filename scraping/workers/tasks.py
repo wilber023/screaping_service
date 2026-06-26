@@ -128,6 +128,7 @@ def run_scraper(self, source: str) -> Dict[str, Any]:
                         presentacion=getattr(normalized, "presentacion", None),
                     )
                     db.add(product)
+                    db.flush()  # ensure product.id exists in DB before price_history FK
 
                     if normalized.price_amount is not None:
                         history = PriceHistory(
