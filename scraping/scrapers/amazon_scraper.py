@@ -19,20 +19,30 @@ logger = logging.getLogger(__name__)
 _BASE = "https://www.amazon.com.mx"
 _SEARCH = "https://www.amazon.com.mx/s?k={query}&i=garden"
 
-# Queries específicos para productos agrícolas aplicables a los 7 cultivos
+# Queries específicos — productos agrícolas comerciales México, rangos $100-$2000 MXN
 _QUERIES = [
-    "herbicida glifosato agricola litro",
-    "herbicida 2 4 D maiz cultivo",
-    "fungicida mancozeb tomate papa fresa",
-    "fungicida clorotalonil cobre agricola",
-    "insecticida clorpirifos maiz frijol",
-    "insecticida malathion lambda agricola",
-    "insecticida neem organico cultivos",
-    "fertilizante urea agricola cultivos",
-    "fertilizante NPK folilar agricola",
-    "fungicida oxicloruro cobre tomate",
-    "insecticida abamectina acaricida cultivos",
-    "herbicida paraquat diquat agricola",
+    # Fungicidas comerciales México
+    "fungicida tebuconazol trifloxystrobin agricola",
+    "fungicida polvo humectable mancozeb clorotalonil cultivos",
+    "fungicida oxicloruro cobre tomate papa fresa agricola",
+    "fungicida azoxistrobina propiconazol hortalizas",
+    # Insecticidas comerciales México
+    "insecticida imidacloprid agricola plagas cultivos",
+    "insecticida abamectina minador araña tomate agricola",
+    "insecticida clorpirifos diazinon maiz frijol agricola",
+    "insecticida lambda cihalotrina cipermetrina cultivos",
+    "insecticida espinosad trips mosca blanca agricola",
+    # Herbicidas comerciales México
+    "herbicida atrazina maiz sellador agricola",
+    "herbicida mesotriona coquillo maiz agricola",
+    "herbicida clethodim jitomate soya maleza",
+    "herbicida 2 4 D hierbamina agricola hoja ancha",
+    "herbicida glifosato concentrado agricola",
+    # Fertilizantes agrícolas México
+    "fertilizante ultrasol NPK hortalizas tomate",
+    "fertilizante novatec NPK maiz papa fresa agricola",
+    "humus lombriz abono organico agricola cultivos",
+    "fertilizante foliar micronutrientes agricola",
 ]
 
 _CROP_KEYWORDS = ["calabaza", "frijol", "mora", "maíz", "maiz", "papa", "fresa", "tomate"]
@@ -77,8 +87,9 @@ _EXCLUDE_PHRASES = [
     "mosquitero", "patio al aire", "cocina jardín terraza",
 ]
 
-# Precio máximo razonable por unidad en MXN (filtra outliers de conversión USD→MXN)
-_MAX_PRICE_MXN = 12_000
+# Precio máximo razonable por unidad en MXN
+# Fertilizantes 25kg pueden llegar a $2,000; productos importados desde EEUU son outliers
+_MAX_PRICE_MXN = 5_000
 
 
 class AmazonScraper(BaseScraper):
