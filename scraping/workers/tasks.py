@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from scraping.workers.celery_worker import celery_app
-from scraping.scrapers import AgrofyScraper, MercadoLibreScraper, SyngentaScraper, BayerScraper, BasfScraper, CofeprisScraper
+from scraping.scrapers import AgrofyScraper, MercadoLibreScraper, SyngentaScraper, BayerScraper, BasfScraper, CofeprisScraper, AmazonScraper
 from scraping.parsers import ProductParser
 from scraping.normalizers import ProductNormalizer
 from scraping.storage.database import SessionLocal
@@ -22,6 +22,7 @@ _SCRAPER_MAP = {
     "bayer": BayerScraper,
     "basf": BasfScraper,
     "cofepris": CofeprisScraper,
+    "amazon": AmazonScraper,
 }
 
 

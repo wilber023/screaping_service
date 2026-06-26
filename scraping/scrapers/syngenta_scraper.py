@@ -28,11 +28,7 @@ _PRODUCT_TYPE_KEYWORDS = {
     "fertilizante": ["fertilizante", "nutricion", "fertilizer"],
 }
 
-_CROP_KEYWORDS = [
-    "calabaza", "frijol", "manzana", "mora", "cereza", "maíz", "maiz",
-    "durazno", "uva", "naranja", "pimienta", "papa", "frambuesa",
-    "soja", "fresa", "tomate", "trigo", "arroz", "sorgo",
-]
+_CROP_KEYWORDS = ["calabaza", "frijol", "mora", "maíz", "maiz", "papa", "fresa", "tomate"]
 
 
 class SyngentaScraper(BaseScraper):

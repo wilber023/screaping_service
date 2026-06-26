@@ -20,11 +20,7 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://www.cropscience.bayer.mx"
 _CATALOG_URL = f"{_BASE_URL}/productos"
 
-_CROP_KEYWORDS = [
-    "calabaza", "frijol", "manzana", "mora", "cereza", "maíz", "maiz",
-    "durazno", "uva", "naranja", "pimienta", "papa", "frambuesa",
-    "soja", "fresa", "tomate", "trigo", "arroz", "sorgo",
-]
+_CROP_KEYWORDS = ["calabaza", "frijol", "mora", "maíz", "maiz", "papa", "fresa", "tomate"]
 
 _TYPE_KEYWORDS = {
     "fungicida": ["fungicida", "fungicide"],

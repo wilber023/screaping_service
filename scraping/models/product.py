@@ -17,6 +17,7 @@ class ProductSource(str, enum.Enum):
     bayer = "bayer"
     basf = "basf"
     cofepris = "cofepris"
+    amazon = "amazon"
 
 
 class ProductType(str, enum.Enum):

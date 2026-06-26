@@ -1,10 +1,11 @@
 """
-MercadoLibre scraper — uses the public MercadoLibre REST API (no auth needed,
-rate-limited by IP). Site ID MLM = México.
+MercadoLibre scraper — MercadoLibre REST API con OAuth2 client_credentials.
+Requiere ML_CLIENT_ID y ML_CLIENT_SECRET en el entorno (.env).
+Site ID MLM = México.
 """
 from __future__ import annotations
 import logging
-import re
+import os
 import time
 from typing import List, Optional
 
@@ -16,8 +17,8 @@ from scraping.utils.headers import get_api_headers
 
 logger = logging.getLogger(__name__)
 
+_API_TOKEN = "https://api.mercadolibre.com/oauth/token"
 _API_SEARCH = "https://api.mercadolibre.com/sites/MLM/search"
-_API_ITEM = "https://api.mercadolibre.com/items/{item_id}"
 
 _SEARCH_QUERIES = [
     "fungicida agricola",
@@ -27,52 +28,85 @@ _SEARCH_QUERIES = [
     "plaguicida cultivos",
 ]
 
-_TARGET_CROPS = [
-    "calabaza", "frijol", "manzana", "mora", "cereza", "maíz", "maiz",
-    "durazno", "uva", "naranja", "pimienta", "papa", "frambuesa",
-    "soja", "fresa", "tomate",
-]
+_TARGET_CROPS = ["calabaza", "frijol", "mora", "maíz", "maiz", "papa", "fresa", "tomate"]
 
 
 class MercadoLibreScraper(BaseScraper):
     source = "mercadolibre"
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._client_id = os.environ.get("ML_CLIENT_ID", "")
+        self._client_secret = os.environ.get("ML_CLIENT_SECRET", "")
+        self._access_token: Optional[str] = None
+        self._token_expires_at: float = 0.0
+
     def scrape(self) -> List[RawProduct]:
+        if not self._client_id or not self._client_secret:
+            logger.error(
+                "ML_CLIENT_ID / ML_CLIENT_SECRET no configurados. "
+                "Registra tu app en developers.mercadolibre.com y agrega las variables al .env"
+            )
+            return []
+
         products: List[RawProduct] = []
         seen_ids: set[str] = set()
 
         with httpx.Client(timeout=30, headers=get_api_headers(), follow_redirects=True) as client:
+            token = self._get_token(client)
+            if not token:
+                return []
+
             for query in _SEARCH_QUERIES:
                 try:
-                    items = self._search(client, query)
+                    items = self._search(client, token, query)
                     for item_data in items:
                         item_id = item_data.get("id")
                         if not item_id or item_id in seen_ids:
                             continue
                         seen_ids.add(item_id)
-
                         product = self._build_product_from_search(item_data, query)
                         if product:
                             products.append(product)
-
-                    random_delay(1.5, 3.5)
+                    random_delay(1.0, 2.5)
                 except Exception as exc:
                     logger.warning("MercadoLibre query='%s' failed: %s", query, exc)
 
         logger.info("MercadoLibre scrape complete: %d products", len(products))
         return products
 
-    def _search(self, client: httpx.Client, query: str) -> List[dict]:
-        params = {
-            "q": query,
-            "limit": 50,
-            "offset": 0,
-            "category": "MLM1403",  # Fertilizantes, Plaguicidas y Semillas
-        }
-        resp = client.get(_API_SEARCH, params=params)
+    def _get_token(self, client: httpx.Client) -> Optional[str]:
+        if self._access_token and time.time() < self._token_expires_at:
+            return self._access_token
+        try:
+            resp = client.post(
+                _API_TOKEN,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            self._access_token = data["access_token"]
+            self._token_expires_at = time.time() + data.get("expires_in", 21600) - 60
+            logger.info("MercadoLibre: token obtenido, expira en %ds", data.get("expires_in", 0))
+            return self._access_token
+        except Exception as exc:
+            logger.error("MercadoLibre OAuth failed: %s", exc)
+            return None
+
+    def _search(self, client: httpx.Client, token: str, query: str) -> List[dict]:
+        params = {"q": query, "limit": 50, "offset": 0}
+        resp = client.get(
+            _API_SEARCH,
+            params=params,
+            headers={"Authorization": f"Bearer {token}"},
+        )
         resp.raise_for_status()
-        data = resp.json()
-        return data.get("results", [])
+        return resp.json().get("results", [])
 
     def _build_product_from_search(self, item: dict, query: str) -> Optional[RawProduct]:
         name = item.get("title", "").strip()

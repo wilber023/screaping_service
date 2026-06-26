@@ -97,7 +97,7 @@
 <header>
   <div>
     <h1>🌱 AgroGraph — Catálogo de Productos</h1>
-    <span>Agroquímicos para 14 cultivos</span>
+    <span>Agroquímicos para 7 cultivos</span>
   </div>
 </header>
 
@@ -118,7 +118,16 @@
     <option value="fertilizante">Fertilizantes</option>
   </select>
 
-  <input type="text" id="filterCrop" placeholder="Cultivo (ej: tomate)" style="width:160px" />
+  <select id="filterCrop">
+    <option value="">Todos los cultivos</option>
+    <option value="calabaza">Calabaza — hortaliza</option>
+    <option value="frijol">Frijol — leguminosa</option>
+    <option value="mora">Mora — fruta</option>
+    <option value="maiz">Maíz — cereal</option>
+    <option value="papa">Papa — tubérculo</option>
+    <option value="fresa">Fresa — fruta</option>
+    <option value="tomate">Tomate — hortaliza</option>
+  </select>
 
   <button id="btnLoad" onclick="loadProducts()">Cargar productos</button>
 </div>

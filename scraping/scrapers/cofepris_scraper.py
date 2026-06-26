@@ -49,12 +49,7 @@ _HTML_PAGES = [
     "https://www.gob.mx/cofepris/documentos/plaguicidas-y-nutrientes-vegetales-registrados",
 ]
 
-_CROP_KEYWORDS = [
-    "calabaza", "frijol", "manzana", "mora", "cereza", "maíz", "maiz",
-    "durazno", "uva", "naranja", "pimienta", "papa", "frambuesa",
-    "soja", "fresa", "tomate", "trigo", "arroz", "sorgo", "chile",
-    "jitomate", "aguacate", "cítrico", "citrico",
-]
+_CROP_KEYWORDS = ["calabaza", "frijol", "mora", "maíz", "maiz", "papa", "fresa", "tomate"]
 
 _TYPE_MAP = {
     "fungicida": "fungicida",

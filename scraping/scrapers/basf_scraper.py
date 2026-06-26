@@ -19,11 +19,7 @@ _BASE_URL = "https://agriculture.basf.com"
 _CATALOG_URL = f"{_BASE_URL}/mx/es/crop-protection/products.html"
 _ALT_CATALOG_URL = f"{_BASE_URL}/mx/es/proteccion-de-cultivos/nuestros-productos.html"
 
-_CROP_KEYWORDS = [
-    "calabaza", "frijol", "manzana", "mora", "cereza", "maíz", "maiz",
-    "durazno", "uva", "naranja", "pimienta", "papa", "frambuesa",
-    "soja", "fresa", "tomate", "trigo", "arroz",
-]
+_CROP_KEYWORDS = ["calabaza", "frijol", "mora", "maíz", "maiz", "papa", "fresa", "tomate"]
 
 _TYPE_KEYWORDS = {
     "fungicida": ["fungicida", "fungicide"],
