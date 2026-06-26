@@ -105,6 +105,24 @@ _EXCLUDE_PHRASES = [
     "mosquitero", "patio al aire", "cocina jardín terraza",
     # Semillas (no agroquímicos)
     "semilla de", "paquete de semillas",
+    # Trampas físicas / adhesivas (no son insecticidas químicos)
+    "trampa adhesiva", "trampa amarilla", "trampa para moscas",
+    "trampa para insectos", "trampa para insectos voladores",
+    "atrapamoscas", "trampa de doble cara",
+    "trampas para moscas de la fruta", "trampa para ventana",
+    "cebo especial y embudo",
+    # Equipo de aspersión (segunda línea)
+    "pulverizador de presión", "rociador de presión de jardín",
+    # Herbicidas para caminos/patios (no cultivos agrícolas)
+    "para caminos", "para patios y", "para terrazas o accesos",
+    "eliminación de malezas en caminos",
+    "base de aceto", "sustancia básica acetum",
+    # Selladores de poda
+    "pruning seal", "sellador de poda",
+    # Productos capilares o cosméticos (falsos positivos)
+    "cabello", "queratina", "acondicionador profundo", "bond repair",
+    # Productos sin utilidad en cultivo
+    "colector protector",
 ]
 
 # Precio máximo razonable por unidad en MXN
@@ -282,14 +300,22 @@ class AmazonScraper(BaseScraper):
         return None
 
     def _should_exclude(self, name: str) -> bool:
-        """Devuelve True si el producto es accesorio, equipo o no aplicable."""
+        """Devuelve True si el producto es accesorio, equipo o no aplicable al cultivo."""
         name_lower = name.lower()
         if any(phrase in name_lower for phrase in _EXCLUDE_PHRASES):
             return True
-        # Herramientas agrícolas que no son agroquímicos (segunda verificación por palabra suelta)
-        tool_words = ["esparcidor", "sembradora", "dispensador", "distribuidor de abono",
-                      "aplicador de", "mochila toping", "kit de preparación"]
-        return any(w in name_lower for w in tool_words)
+        # Herramientas que no son agroquímicos
+        tool_words = [
+            "esparcidor", "sembradora", "dispensador", "distribuidor de abono",
+            "aplicador de", "mochila toping", "kit de preparación",
+            "pulverizador de presión", "rociador de presión",
+        ]
+        if any(w in name_lower for w in tool_words):
+            return True
+        # El producto se auto-declara no agrícola
+        if "no agrícola" in name_lower or "no agricola" in name_lower:
+            return True
+        return False
 
     def _infer_type(self, name: str, query: str) -> str:
         text = (name + " " + query).lower()
