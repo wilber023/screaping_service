@@ -61,30 +61,50 @@ _TYPE_MAP = {
     "bactericida": "fungicida",
 }
 
-# Palabras que indican que el producto NO es aplicable al cultivo
+# Palabras que indican que el producto NO es un agroquímico aplicable al cultivo
 _EXCLUDE_PHRASES = [
-    # Accesorios y equipo
+    # Herramientas y equipo de aplicación/distribución
+    "esparcidor de fertilizante", "esparcidor de abono", "esparcidora de fertilizante",
+    "distribuidor de fertilizante", "distribuidor manual de fertilizante",
+    "herramienta de fertiliz", "herramienta esparcidora",
+    "dispensador de fertilizante", "dispensador manual",
+    "aplicador de fertilizante", "aplicador de estiércol",
+    "mochila topdressing", "mochila de fertilizantes",
+    "bolsa dispensadora", "bolsa de estiércol",
+    "sembradora", "sembradora doble", "sembradora de",
+    "herramienta de siembra", "herramienta agrícola portátil",
+    # Boquillas y accesorios de equipo de aspersión
     "boquilla", "nozzle", "inyector venturi", "accesorios para drone",
-    "accesorios pulverizador", "fumigador con varilla", "bomba de mochila",
+    "accesorios pulverizador", "fumigador con varilla",
     "refaccion", "pieza de repuesto", "cabezal agrícola",
-    # Repelentes de animales (no plagas agrícolas)
+    # Contenedores y bolsas para cultivo
+    "bolsa de cultivo", "bolsa tejida tipo mochila", "bolsa geográfica",
+    "contenedor de cultivo", "maceta de tela", "paca de paja",
+    "para terraza y flores",
+    # Sistemas hidropónicos / aeropónicos
+    "hidropónico", "hidroponica", "hidroponico", "aeropónico",
+    # Repelentes de animales vertebrados (no plagas agrícolas de cultivo)
     "repelente de conejos", "repelente de ciervos", "repelente de topos",
-    "repelente de armadillo", "repelente de gopher", "gopher", "ciervo campo",
-    "repelente de venado", "disuasión de tobos",
-    # Repelentes eléctricos/físicos
+    "repelente de armadillo", "repelente de gopher", "repelente de venado",
+    "disuasión de tobos",
+    # Repelentes y trampas eléctricas/físicas
     "bug zapper", "fly killer", "raqueta exterminador", "raqueta eléctric",
     "bocinas repelentes", "eliminador de insectos fly",
-    # Plantas ornamentales / uso doméstico
+    # Plantas ornamentales
     "orquídea", "orquidea", "bromelia", "anturio", "keikis",
+    "cactácea", "cactacea", "suculenta", "suculentas",
+    # Uso doméstico / jardinería decorativa
     "plantas de interior", "uso en casa", "jardinería básica",
     "macetas y áreas verdes", "para el hogar y jardín decorativo",
-    # Trampas / señuelos (no químicos aplicables)
-    "señuelo de feromona", "señuelo feromona",
-    "trampa para insectos",
-    # Productos para mascotas
-    "seguro para mascotas", "para mascotas",
-    # Repelentes de mosquitos domésticos
+    "cuidado de plantas y hogar",
+    # Trampas y señuelos
+    "señuelo de feromona", "señuelo feromona", "trampa para insectos",
+    # Mascotas
+    "seguro para mascotas", "para mascotas", "uso en mascotas",
+    # Mosquitos domésticos
     "mosquitero", "patio al aire", "cocina jardín terraza",
+    # Semillas (no agroquímicos)
+    "semilla de", "paquete de semillas",
 ]
 
 # Precio máximo razonable por unidad en MXN
@@ -264,7 +284,12 @@ class AmazonScraper(BaseScraper):
     def _should_exclude(self, name: str) -> bool:
         """Devuelve True si el producto es accesorio, equipo o no aplicable."""
         name_lower = name.lower()
-        return any(phrase in name_lower for phrase in _EXCLUDE_PHRASES)
+        if any(phrase in name_lower for phrase in _EXCLUDE_PHRASES):
+            return True
+        # Herramientas agrícolas que no son agroquímicos (segunda verificación por palabra suelta)
+        tool_words = ["esparcidor", "sembradora", "dispensador", "distribuidor de abono",
+                      "aplicador de", "mochila toping", "kit de preparación"]
+        return any(w in name_lower for w in tool_words)
 
     def _infer_type(self, name: str, query: str) -> str:
         text = (name + " " + query).lower()
