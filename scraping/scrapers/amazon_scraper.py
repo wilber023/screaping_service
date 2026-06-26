@@ -19,30 +19,32 @@ logger = logging.getLogger(__name__)
 _BASE = "https://www.amazon.com.mx"
 _SEARCH = "https://www.amazon.com.mx/s?k={query}&i=garden"
 
-# Queries específicos — productos agrícolas comerciales México, rangos $100-$2000 MXN
-_QUERIES = [
-    # Fungicidas comerciales México
-    "fungicida tebuconazol trifloxystrobin agricola",
-    "fungicida polvo humectable mancozeb clorotalonil cultivos",
-    "fungicida oxicloruro cobre tomate papa fresa agricola",
-    "fungicida azoxistrobina propiconazol hortalizas",
-    # Insecticidas comerciales México
-    "insecticida imidacloprid agricola plagas cultivos",
-    "insecticida abamectina minador araña tomate agricola",
-    "insecticida clorpirifos diazinon maiz frijol agricola",
-    "insecticida lambda cihalotrina cipermetrina cultivos",
-    "insecticida espinosad trips mosca blanca agricola",
-    # Herbicidas comerciales México
-    "herbicida atrazina maiz sellador agricola",
-    "herbicida mesotriona coquillo maiz agricola",
-    "herbicida clethodim jitomate soya maleza",
-    "herbicida 2 4 D hierbamina agricola hoja ancha",
-    "herbicida glifosato concentrado agricola",
-    # Fertilizantes agrícolas México
-    "fertilizante ultrasol NPK hortalizas tomate",
-    "fertilizante novatec NPK maiz papa fresa agricola",
-    "humus lombriz abono organico agricola cultivos",
-    "fertilizante foliar micronutrientes agricola",
+# Queries con cultivos asociados explícitamente para tagging
+# Formato: (query_string, [cultivos_que_aplican])
+_QUERIES: list[tuple[str, list[str]]] = [
+    # Fungicidas por cultivo
+    ("fungicida tomate fresa botrytis tizón",          ["tomate", "fresa"]),
+    ("fungicida papa tizón tardío phytophthora",        ["papa", "tomate"]),
+    ("fungicida maiz roya tizón foliar",                ["maiz"]),
+    ("fungicida frijol antracnosis roya agricola",      ["frijol", "maiz"]),
+    ("fungicida mora fresa botrytis monilia",           ["mora", "fresa"]),
+    ("fungicida tebuconazol trifloxystrobin agricola",  ["tomate", "papa", "fresa", "maiz"]),
+    # Insecticidas por cultivo
+    ("insecticida tomate mosca blanca minador trips",   ["tomate", "papa", "fresa"]),
+    ("insecticida maiz gusano cogollero pulgón",        ["maiz", "frijol"]),
+    ("insecticida papa frijol pulgón diabrótica",       ["papa", "frijol", "maiz"]),
+    ("insecticida abamectina araña roja ácaros",        ["tomate", "fresa", "papa", "mora"]),
+    ("insecticida imidacloprid mosca blanca áfidos",    ["tomate", "calabaza", "papa"]),
+    ("insecticida espinosad trips mosca blanca cultivos", ["tomate", "fresa", "papa"]),
+    # Herbicidas por cultivo
+    ("herbicida maiz atrazina coquillo pre-emergente",  ["maiz"]),
+    ("herbicida clethodim jitomate tomate gramíneas",   ["tomate", "frijol", "papa"]),
+    ("herbicida glifosato maleza agricola",             ["maiz", "frijol"]),
+    # Fertilizantes por cultivo
+    ("fertilizante tomate fresa NPK soluble",           ["tomate", "fresa"]),
+    ("fertilizante maiz papa NPK agricola",             ["maiz", "papa", "frijol", "calabaza"]),
+    ("humus lombriz abono organico cultivos",           ["tomate", "papa", "maiz", "fresa", "frijol", "mora", "calabaza"]),
+    ("fertilizante foliar micronutrientes hortalizas",  ["tomate", "papa", "fresa", "calabaza"]),
 ]
 
 _CROP_KEYWORDS = ["calabaza", "frijol", "mora", "maíz", "maiz", "papa", "fresa", "tomate"]
@@ -137,17 +139,17 @@ class AmazonScraper(BaseScraper):
         products: List[RawProduct] = []
         seen_asins: set[str] = set()
 
-        for query in _QUERIES:
+        for query, query_crops in _QUERIES:
             try:
                 url = _SEARCH.format(query=quote_plus(query))
-                logger.info("Amazon: query=%s", query)
+                logger.info("Amazon: query=%s crops=%s", query, query_crops)
                 html = self._fetch_html(url, wait_selector=".s-search-results, #search")
                 if not html or len(html) < 5000:
                     logger.warning("Amazon: respuesta muy corta query=%s (%d bytes)", query, len(html or ""))
                     random_delay(11, 14)
                     continue
 
-                page_products = self._parse_search_page(html, query, seen_asins)
+                page_products = self._parse_search_page(html, query, query_crops, seen_asins)
                 products.extend(page_products)
                 logger.info("Amazon: query=%s → %d productos aceptados", query, len(page_products))
 
@@ -159,7 +161,7 @@ class AmazonScraper(BaseScraper):
         logger.info("Amazon scrape complete: %d productos", len(products))
         return products
 
-    def _parse_search_page(self, html: str, query: str, seen_asins: set) -> List[RawProduct]:
+    def _parse_search_page(self, html: str, query: str, query_crops: list, seen_asins: set) -> List[RawProduct]:
         soup = BeautifulSoup(html, "html.parser")
         products = []
 
@@ -176,14 +178,14 @@ class AmazonScraper(BaseScraper):
             if not asin or asin in seen_asins:
                 continue
 
-            product = self._parse_card(card, asin, query)
+            product = self._parse_card(card, asin, query, query_crops)
             if product:
                 seen_asins.add(asin)
                 products.append(product)
 
         return products
 
-    def _parse_card(self, card, asin: str, query: str) -> Optional[RawProduct]:
+    def _parse_card(self, card, asin: str, query: str, query_crops: list = None) -> Optional[RawProduct]:
         # Título
         title_el = (
             card.select_one("h2 a span")
@@ -244,7 +246,9 @@ class AmazonScraper(BaseScraper):
                 pass
 
         product_type = self._infer_type(name, query)
-        target_crops = [c for c in _CROP_KEYWORDS if c in name.lower()]
+        # Cultivos detectados en el nombre + cultivos del query (para productos que no los mencionan explícitamente)
+        name_crops = [c for c in _CROP_KEYWORDS if c in name.lower()]
+        target_crops = list(dict.fromkeys(name_crops + (query_crops or [])))
 
         return RawProduct(
             source=self.source,
