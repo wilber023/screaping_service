@@ -130,6 +130,26 @@ class AmazonScraper(BaseScraper):
         brand_el = card.select_one(".a-size-base.a-color-secondary") or card.select_one(".a-row .a-size-small span")
         manufacturer = brand_el.get_text(strip=True) if brand_el else "Amazon MX"
 
+        # Rating
+        rating = None
+        rating_el = card.select_one(".a-icon-alt") or card.select_one("[aria-label*='estrellas']")
+        if rating_el:
+            text = rating_el.get_text(strip=True).replace(",", ".")
+            try:
+                rating = float(text.split()[0])
+            except (ValueError, IndexError):
+                pass
+
+        # Reviews
+        reviews = None
+        reviews_el = card.select_one(".a-size-base.s-underline-text") or card.select_one("[aria-label*='valoraciones']")
+        if reviews_el:
+            text = reviews_el.get_text(strip=True).replace(",", "").replace(".", "")
+            try:
+                reviews = int("".join(filter(str.isdigit, text)))
+            except ValueError:
+                pass
+
         product_type = self._infer_type(name, query)
         target_crops = [c for c in _CROP_KEYWORDS if c in name.lower()]
 
@@ -147,6 +167,8 @@ class AmazonScraper(BaseScraper):
             stock_raw="in_stock",
             availability_regions=["MX"],
             image_url=image_url,
+            rating=rating,
+            reviews=reviews,
         )
 
     def _infer_type(self, name: str, query: str) -> str:

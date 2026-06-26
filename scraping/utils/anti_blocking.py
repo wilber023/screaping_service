@@ -27,38 +27,66 @@ _CAPTCHA_INDICATORS = [
     "bot detection",
     "rate limit",
     "too many requests",
-    "just a moment",           # Cloudflare IUAM challenge title
-    "cf-browser-verification", # Cloudflare challenge div id
-    "challenge-form",          # Cloudflare challenge form
-    "checking your browser",   # Cloudflare challenge text
+    "just a moment",
+    "cf-browser-verification",
+    "challenge-form",
+    "checking your browser",
+    "suspicious-traffic",
+    "enter the characters",
+    "prueba que eres humano",
+    "challenge validation",
+]
+
+_BLOCK_INDICATORS = [
+    "403 forbidden",
+    "503 service unavailable",
+    "your ip has been blocked",
+    "ip address blocked",
+    "access to this resource",
 ]
 
 
 def detect_block(html: str) -> bool:
     lower = html.lower()
-    return any(indicator in lower for indicator in _CAPTCHA_INDICATORS)
+    return any(s in lower for s in _CAPTCHA_INDICATORS + _BLOCK_INDICATORS)
 
 
-def random_delay(min_seconds: float = 1.0, max_seconds: float = 4.0) -> None:
-    delay = random.uniform(min_seconds, max_seconds)
-    time.sleep(delay)
+def detect_captcha(html: str) -> bool:
+    lower = html.lower()
+    return any(s in lower for s in _CAPTCHA_INDICATORS)
 
 
-async def async_random_delay(min_seconds: float = 1.0, max_seconds: float = 4.0) -> None:
-    delay = random.uniform(min_seconds, max_seconds)
-    await asyncio.sleep(delay)
+def random_delay(min_seconds: float = 3.0, max_seconds: float = 7.0) -> None:
+    """Delay con variación humana: pausa corta + larga para simular lectura."""
+    base = random.uniform(min_seconds, max_seconds)
+    # Ocasionalmente una pausa más larga (simula distracción)
+    if random.random() < 0.15:
+        base += random.uniform(3, 8)
+    time.sleep(base)
+
+
+async def async_random_delay(min_seconds: float = 3.0, max_seconds: float = 7.0) -> None:
+    base = random.uniform(min_seconds, max_seconds)
+    if random.random() < 0.15:
+        base += random.uniform(3, 8)
+    await asyncio.sleep(base)
 
 
 def scraper_retry(func: Callable) -> Callable:
-    """Decorator: 3 attempts with exponential backoff, logs before each sleep."""
+    """3 intentos con backoff exponencial, log antes de cada reintento."""
     return retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=30),
+        wait=wait_exponential(multiplier=2, min=5, max=60),
         retry=retry_if_exception_type((Exception,)),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )(func)
 
 
+def random_scroll_delay() -> None:
+    """Simula tiempo de scroll y lectura de página."""
+    time.sleep(random.uniform(1.5, 3.5))
+
+
 class BlockedError(Exception):
-    """Raised when the scraper detects a block or CAPTCHA page."""
+    """Se lanza cuando el scraper detecta bloqueo o CAPTCHA."""

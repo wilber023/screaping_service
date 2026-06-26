@@ -56,6 +56,9 @@ class ProductResponse(BaseModel):
     availability_regions: List[str] = Field(default_factory=list)
     scraped_at: datetime
     image_url: Optional[str] = None
+    rating: Optional[float] = None
+    reviews: Optional[int] = None
+    presentacion: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -84,6 +87,9 @@ class ProductResponse(BaseModel):
             availability_regions=p.availability_regions or [],  # type: ignore[attr-defined]
             scraped_at=p.scraped_at,  # type: ignore[attr-defined]
             image_url=p.image_url,  # type: ignore[attr-defined]
+            rating=p.rating,  # type: ignore[attr-defined]
+            reviews=p.reviews,  # type: ignore[attr-defined]
+            presentacion=p.presentacion,  # type: ignore[attr-defined]
         )
 
 

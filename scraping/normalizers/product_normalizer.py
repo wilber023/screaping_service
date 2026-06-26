@@ -10,21 +10,13 @@ from scraping.parsers.product_parser import ParsedProduct
 
 logger = logging.getLogger(__name__)
 
-# Canonical 14 crops (also accept common typos/aliases)
+# 7 cultivos objetivo con aliases
 _CROP_ALIASES: dict[str, str] = {
     "calabaza": "calabaza", "squash": "calabaza", "pumpkin": "calabaza",
     "frijol": "frijol", "frijoles": "frijol", "bean": "frijol", "beans": "frijol",
-    "manzana": "manzana", "apple": "manzana",
     "mora": "mora", "blackberry": "mora",
-    "cereza": "cereza", "cherry": "cereza",
     "maíz": "maíz", "maiz": "maíz", "corn": "maíz", "maize": "maíz",
-    "durazno": "durazno", "peach": "durazno", "melocotón": "durazno",
-    "uva": "uva", "grape": "uva", "vid": "uva",
-    "naranja": "naranja", "orange": "naranja",
-    "pimienta": "pimienta", "pepper": "pimienta", "pimiento": "pimienta",
     "papa": "papa", "potato": "papa", "patata": "papa",
-    "frambuesa": "frambuesa", "raspberry": "frambuesa",
-    "soja": "soja", "soy": "soja", "soybean": "soja", "soya": "soja",
     "fresa": "fresa", "strawberry": "fresa",
     "tomate": "tomate", "tomato": "tomate", "jitomate": "tomate",
 }
@@ -51,6 +43,7 @@ class NormalizedProduct:
         "price_amount", "price_currency", "price_original_currency",
         "price_last_updated", "stock_status", "stock_quantity",
         "availability_regions", "scraped_at", "hash_dedup", "image_url",
+        "rating", "reviews", "presentacion",
     )
 
     def __init__(self, **kwargs) -> None:
@@ -95,6 +88,9 @@ class ProductNormalizer:
             scraped_at=parsed.scraped_at,
             hash_dedup=parsed.hash_dedup,
             image_url=getattr(parsed, "image_url", None),
+            rating=getattr(parsed, "rating", None),
+            reviews=getattr(parsed, "reviews", None),
+            presentacion=getattr(parsed, "presentacion", None),
         )
 
     @staticmethod

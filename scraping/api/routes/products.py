@@ -27,13 +27,46 @@ def _build_cache_key(prefix: str, **kwargs) -> str:
     return f"{prefix}:{parts}"
 
 
+@router.get("/cultivo/{cultivo}", response_model=ProductListResponse, summary="Productos por cultivo")
+def productos_por_cultivo(
+    cultivo: str,
+    product_type: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    return list_products(
+        crop=cultivo, disease=None, product_type=product_type,
+        manufacturer=None, source=None, active_ingredient=None,
+        page=page, per_page=per_page, db=db, current_user=current_user,
+    )
+
+
+@router.get("/enfermedad/{enfermedad}", response_model=ProductListResponse, summary="Productos por enfermedad")
+def productos_por_enfermedad(
+    enfermedad: str,
+    product_type: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    return list_products(
+        crop=None, disease=enfermedad, product_type=product_type,
+        manufacturer=None, source=None, active_ingredient=None,
+        page=page, per_page=per_page, db=db, current_user=current_user,
+    )
+
+
 @router.get("", response_model=ProductListResponse, summary="List products")
 def list_products(
     crop: Optional[str] = Query(None, description="Filter by crop (e.g. tomate)"),
     disease: Optional[str] = Query(None, description="Filter by disease name (partial match)"),
     product_type: Optional[str] = Query(None, description="Filter by type: fungicida, insecticida, herbicida, fertilizante"),
     manufacturer: Optional[str] = Query(None, description="Filter by manufacturer (partial match)"),
-    source: Optional[str] = Query(None, description="Filter by source: agrofy, mercadolibre, syngenta, bayer, basf"),
+    source: Optional[str] = Query(None, description="Filter by source"),
+    active_ingredient: Optional[str] = Query(None, description="Filter by active ingredient (partial match)"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -43,6 +76,7 @@ def list_products(
         "products:list",
         crop=crop, disease=disease, type=product_type,
         manufacturer=manufacturer, source=source,
+        active_ingredient=active_ingredient,
         page=page, per_page=per_page,
         user_type=current_user.user_type,
     )
@@ -53,7 +87,7 @@ def list_products(
     query = db.query(Product).filter(Product.is_active == True)
 
     if crop:
-        query = query.filter(sa.cast(Product.target_crops, sa.Text).ilike(f'%"{crop}"%'))
+        query = query.filter(sa.cast(Product.target_crops, sa.Text).ilike(f'%{crop}%'))
     if product_type:
         query = query.filter(Product.product_type == product_type)
     if manufacturer:
@@ -62,6 +96,8 @@ def list_products(
         query = query.filter(Product.source == source)
     if disease:
         query = query.filter(sa.cast(Product.target_diseases, sa.Text).ilike(f"%{disease}%"))
+    if active_ingredient:
+        query = query.filter(Product.active_ingredient.ilike(f"%{active_ingredient}%"))
 
     total = query.count()
     offset = (page - 1) * per_page
@@ -164,4 +200,7 @@ def _serialize_product(product: Product, user_type: UserType) -> ProductResponse
         availability_regions=product.availability_regions or [],
         scraped_at=product.scraped_at,
         image_url=product.image_url,
+        rating=product.rating,
+        reviews=product.reviews,
+        presentacion=product.presentacion,
     )

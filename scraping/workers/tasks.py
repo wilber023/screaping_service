@@ -123,6 +123,9 @@ def run_scraper(self, source: str) -> Dict[str, Any]:
                         scraped_at=normalized.scraped_at,
                         hash_dedup=normalized.hash_dedup,
                         image_url=getattr(normalized, "image_url", None),
+                        rating=getattr(normalized, "rating", None),
+                        reviews=getattr(normalized, "reviews", None),
+                        presentacion=getattr(normalized, "presentacion", None),
                     )
                     db.add(product)
 

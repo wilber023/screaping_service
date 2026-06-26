@@ -79,4 +79,7 @@ class Product(Base):
     )
     hash_dedup: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     image_url: Mapped[str] = mapped_column(String(2048), nullable=True)
+    rating: Mapped[float] = mapped_column(Float, nullable=True)
+    reviews: Mapped[int] = mapped_column(Integer, nullable=True)
+    presentacion: Mapped[str] = mapped_column(String(256), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
