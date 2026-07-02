@@ -3,9 +3,11 @@ from typing import List, Optional
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from scraping.api.dependencies import get_db, get_current_user, require_full_access
+from scraping.auth.api_key import verify_api_key
 from scraping.models.product import Product
 from scraping.models.price_history import PriceHistory
 from scraping.schemas.auth import TokenPayload, UserType
@@ -19,12 +21,163 @@ from scraping.storage.redis_client import cache_get, cache_set
 
 router = APIRouter()
 
+# ── Mapeo enfermedad/plaga → tipo de producto ─────────────────────────────────
+_DISEASE_TO_TYPE: dict[str, str] = {
+    # Enfermedades fúngicas → fungicida
+    "mildiu": "fungicida", "mildiú": "fungicida",
+    "botrytis": "fungicida", "moho gris": "fungicida",
+    "tizón": "fungicida", "tizon": "fungicida",
+    "phytophthora": "fungicida",
+    "oidio": "fungicida", "cenicilla": "fungicida", "cenizilla": "fungicida",
+    "roya": "fungicida",
+    "antracnosis": "fungicida",
+    "alternaria": "fungicida",
+    "fusarium": "fungicida",
+    "monilia": "fungicida",
+    "cercospora": "fungicida",
+    "septoria": "fungicida",
+    "verticillium": "fungicida",
+    "pythium": "fungicida",
+    "esclerotinia": "fungicida",
+    "cladosporiosis": "fungicida",
+    "rhizoctonia": "fungicida",
+    "mancha foliar": "fungicida",
+    # Enfermedades bacterianas → fungicida (bactericidas van como fungicida)
+    "bacteriosis": "fungicida",
+    "chancro": "fungicida",
+    "marchitez bacteriana": "fungicida",
+    # Plagas insectiles → insecticida
+    "mosca blanca": "insecticida",
+    "trips": "insecticida", "thrips": "insecticida",
+    "pulgón": "insecticida", "pulgon": "insecticida",
+    "áfido": "insecticida", "afido": "insecticida",
+    "araña roja": "insecticida",
+    "ácaro": "insecticida", "acaro": "insecticida", "ácaros": "insecticida",
+    "minador": "insecticida",
+    "gusano cogollero": "insecticida",
+    "diabrótica": "insecticida", "diabrotica": "insecticida",
+    "barrenador": "insecticida",
+    "chicharrita": "insecticida",
+    "escama": "insecticida",
+    "cochinilla": "insecticida",
+    "nematodo": "insecticida",
+    "mosquita blanca": "insecticida",
+    # Malezas → herbicida
+    "maleza": "herbicida",
+    "coquillo": "herbicida",
+    "zacate": "herbicida",
+    "gramínea": "herbicida", "graminea": "herbicida",
+    "hierba": "herbicida",
+    # Deficiencias nutricionales → fertilizante
+    "deficiencia": "fertilizante",
+    "clorosis": "fertilizante",
+    "amarillamiento": "fertilizante",
+}
+
+
+def _infer_product_type(disease: str) -> Optional[str]:
+    """Infiere el tipo de producto desde el nombre de la enfermedad/plaga."""
+    d = disease.lower().strip()
+    if d in _DISEASE_TO_TYPE:
+        return _DISEASE_TO_TYPE[d]
+    for key, ptype in _DISEASE_TO_TYPE.items():
+        if key in d:
+            return ptype
+    return None
+
+
+class RecommendRequest(BaseModel):
+    disease: str
+    crop: Optional[str] = None
+
+
+class RecommendProduct(BaseModel):
+    name: str
+    brand: Optional[str]
+    description: Optional[str]
+    image: Optional[str]
+    price: str
+    purchase_url: Optional[str]
+
+
+class RecommendResponse(BaseModel):
+    success: bool
+    disease: str
+    crop: Optional[str]
+    product_type: Optional[str]
+    products: List[RecommendProduct]
+
 _CACHE_TTL = 1800  # 30 minutes
 
 
 def _build_cache_key(prefix: str, **kwargs) -> str:
     parts = "&".join(f"{k}={v}" for k, v in sorted(kwargs.items()) if v is not None)
     return f"{prefix}:{parts}"
+
+
+@router.post(
+    "/recommend",
+    response_model=RecommendResponse,
+    summary="Recomienda productos para una enfermedad y cultivo (solo X-API-Key)",
+    tags=["recommend"],
+)
+def recommend_products(
+    body: RecommendRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key),
+):
+    """
+    Endpoint simplificado para el frontend móvil.
+    Solo requiere X-API-Key — sin JWT.
+    Devuelve hasta 10 productos ordenados por precio ascendente.
+    """
+    product_type = _infer_product_type(body.disease)
+
+    query = db.query(Product).filter(Product.is_active == True)
+
+    if body.crop:
+        query = query.filter(
+            sa.cast(Product.target_crops, sa.Text).ilike(f"%{body.crop}%")
+        )
+    if product_type:
+        query = query.filter(Product.product_type == product_type)
+    else:
+        # Si no se puede inferir el tipo, buscar por nombre de enfermedad
+        query = query.filter(
+            sa.cast(Product.target_diseases, sa.Text).ilike(f"%{body.disease}%")
+        )
+
+    db_products = (
+        query
+        .order_by(Product.price_amount.asc().nullslast())
+        .limit(10)
+        .all()
+    )
+
+    def _format(p: Product) -> RecommendProduct:
+        if p.price_amount is not None:
+            price_str = f"${p.price_amount:,.2f} MXN"
+        else:
+            price_str = "Precio no disponible"
+
+        description = p.active_ingredient or p.product_type or ""
+
+        return RecommendProduct(
+            name=p.name,
+            brand=p.manufacturer,
+            description=description,
+            image=p.image_url,
+            price=price_str,
+            purchase_url=p.source_url,
+        )
+
+    return RecommendResponse(
+        success=True,
+        disease=body.disease,
+        crop=body.crop,
+        product_type=product_type,
+        products=[_format(p) for p in db_products],
+    )
 
 
 @router.get("/cultivo/{cultivo}", response_model=ProductListResponse, summary="Productos por cultivo")
